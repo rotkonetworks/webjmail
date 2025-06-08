@@ -51,8 +51,8 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
       // Scroll to newest email after render
       setTimeout(() => {
         const element = emailRefs.current.get(newestEmail.id)
-        element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }, 100)
+        element?.scrollIntoView({ behavior: 'auto', block: 'start' })
+      }, 50)
     }
   }, [email?.id, threadEmails])
   
@@ -93,7 +93,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
   
   const scrollToEmail = (emailId: string) => {
     const element = emailRefs.current.get(emailId)
-    element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    element?.scrollIntoView({ behavior: 'auto', block: 'start' })
   }
   
   const handleDownloadAttachment = (attachment: any) => {
@@ -172,7 +172,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                   selectEmail(null)
                   onClose?.()
                 }}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-white/10 rounded-lg"
                 title="Back"
               >
                 <div className="i-lucide:arrow-left" />
@@ -192,21 +192,21 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
             <div className="flex items-center gap-1">
               <button
                 onClick={() => handleReply('reply')}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-white/10 rounded-lg"
                 title="Reply"
               >
                 <div className="i-lucide:reply" />
               </button>
               <button
                 onClick={() => handleReply('replyAll')}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-white/10 rounded-lg"
                 title="Reply All"
               >
                 <div className="i-lucide:reply-all" />
               </button>
               <button
                 onClick={() => handleReply('forward')}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-white/10 rounded-lg"
                 title="Forward"
               >
                 <div className="i-lucide:forward" />
@@ -214,14 +214,14 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
               <div className="w-px h-6 bg-[var(--border-color)] mx-1" />
               <button
                 onClick={handleFlag}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-white/10 rounded-lg"
                 title={email.keywords.$flagged ? 'Unflag' : 'Flag'}
               >
                 <div className={`${email.keywords.$flagged ? 'i-lucide:star-fill text-[var(--accent-pink)]' : 'i-lucide:star'}`} />
               </button>
               <button
                 onClick={handleDelete}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-2 hover:bg-white/10 rounded-lg"
                 title="Delete"
               >
                 <div className="i-lucide:trash-2" />
@@ -231,7 +231,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
           
           {/* Email thread */}
           <div className="flex-1 overflow-y-auto timeline-scrollbar" ref={timelineRef}>
-            <div className="email-timeline max-w-4xl mx-auto p-6">
+            <div className="email-timeline max-w-4xl mx-auto pt-4 pb-6 px-6">
               {displayEmails.map((threadEmail, index) => {
                 const isExpanded = expandedEmails.has(threadEmail.id)
                 const isCurrent = threadEmail.id === email.id
@@ -249,7 +249,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                       onClick={() => toggleEmailExpansion(threadEmail.id)}
                       className={`
                         bg-[var(--bg-secondary)] rounded-lg p-4 cursor-pointer 
-                        hover:bg-[var(--bg-tertiary)] transition-colors
+                        hover:bg-[var(--bg-tertiary)]
                         ${isCurrent ? 'ring-2 ring-[var(--primary-color)]' : ''}
                       `}
                     >
@@ -277,7 +277,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                         {/* Time and expand icon */}
                         <div className="flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
                           <span>{format(new Date(threadEmail.receivedAt), 'MMM d, yyyy at HH:mm')}</span>
-                          <div className={`i-lucide:chevron-down transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          <div className={`i-lucide:chevron-down ${isExpanded ? 'rotate-180' : ''}`} />
                         </div>
                       </div>
                       
@@ -327,7 +327,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                                 <button
                                   key={attachment.partId}
                                   onClick={() => handleDownloadAttachment(attachment)}
-                                  className="flex items-center gap-3 p-4 bg-[var(--bg-tertiary)] rounded-lg hover:bg-white/10 transition-colors text-left group"
+                                  className="flex items-center gap-3 p-4 bg-[var(--bg-tertiary)] rounded-lg hover:bg-white/10 text-left group"
                                 >
                                   <div className={`${getAttachmentIcon(attachment.type || '')} text-2xl text-[var(--text-secondary)] group-hover:text-[var(--primary-color)]`} />
                                   <div className="flex-1 min-w-0">
@@ -375,10 +375,10 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                     title={format(date, 'MMM d, HH:mm')}
                   >
                     <div className={`
-                      w-3 h-3 rounded-full group-hover:scale-150 transition-transform
+                      w-3 h-3 rounded-full group-hover:scale-110
                       ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
                     `} />
-                    <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap text-xs bg-black/80 px-2 py-1 rounded">
+                    <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 whitespace-nowrap text-xs bg-black/80 px-2 py-1 rounded">
                       {format(date, 'MMM d')}
                     </div>
                   </button>
