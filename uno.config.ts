@@ -4,7 +4,14 @@ export default defineConfig({
   presets: [
     presetUno(),
     presetIcons({
-      cdn: 'https://esm.sh/',
+      collections: {
+        lucide: () => import('@iconify-json/lucide/icons.json').then(i => i.default),
+        'eos-icons': () => import('@iconify-json/eos-icons/icons.json').then(i => i.default),
+      },
+      extraProperties: {
+        'display': 'inline-block',
+        'vertical-align': 'middle',
+      },
     }),
     presetTypography(),
   ],

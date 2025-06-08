@@ -35,6 +35,7 @@
   --primary-hover: #ff0066;
   --compose-btn: #f92672;
   --unread-dot: #66d9ef;
+  --proton-purple: #ae81ff;
 }
 
 /* Polkadot Light Theme */
@@ -62,6 +63,7 @@
   --primary-hover: #cc006c;
   --compose-btn: #e6007a;
   --unread-dot: #0077ff;
+  --proton-purple: #552bbf;
 }
 
 /* Auto theme detection */
@@ -86,6 +88,7 @@
     --primary-hover: #cc006c;
     --compose-btn: #e6007a;
     --unread-dot: #0077ff;
+    --proton-purple: #552bbf;
   }
 }
 
@@ -110,6 +113,7 @@
     --primary-hover: #ff0066;
     --compose-btn: #f92672;
     --unread-dot: #66d9ef;
+    --proton-purple: #ae81ff;
   }
 }
 
