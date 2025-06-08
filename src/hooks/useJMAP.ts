@@ -1,5 +1,5 @@
 import React from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { jmapClient } from '../api/jmap'
 import { useAuthStore } from '../stores/authStore'
 import { useMailStore } from '../stores/mailStore'
