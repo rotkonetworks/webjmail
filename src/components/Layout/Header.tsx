@@ -1,65 +1,95 @@
-import React, { useState } from 'react'
-import { useUIStore } from '../../stores/uiStore'
+import React, { useRef, useEffect } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { config } from '../../config'
-import { MessageComposer } from '../Message/MessageComposer'
 
-export function Header() {
-  const toggleSidebar = useUIStore((state) => state.toggleSidebar)
-  const { session, logout } = useAuthStore()
+interface HeaderProps {
+  searchQuery: string
+  onSearchChange: (query: string) => void
+  onCompose: () => void
+  onSettings: () => void
+}
+
+export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: HeaderProps) {
+  const session = useAuthStore((state) => state.session)
+  const searchRef = useRef<HTMLInputElement>(null)
+  
+  // Focus search on Cmd/Ctrl + K
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        searchRef.current?.focus()
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+  
   const username = session?.username || 'User'
-  const [showComposer, setShowComposer] = useState(false)
-
+  const firstLetter = username.charAt(0).toUpperCase()
+  
   return (
-    <>
-      <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={toggleSidebar}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Toggle sidebar"
-          >
-            <div className="i-lucide:menu text-gray-600" />
-          </button>
-          
-          <div className="flex items-center gap-2">
-            <div className="i-lucide:mail text-primary text-xl" />
-            <h1 className="text-lg font-semibold text-gray-900">{config.appName}</h1>
-          </div>
+    <header className="h-[var(--header-height)] bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex items-center px-4 gap-4">
+      {/* Logo */}
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 bg-[var(--proton-purple)] rounded-lg flex items-center justify-center">
+          <div className="i-lucide:mail text-white text-lg" />
         </div>
-
-        <div className="flex items-center gap-3">
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Search">
-            <div className="i-lucide:search text-gray-600" />
-          </button>
-          
-          <button 
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors" 
-            title="Compose"
-            onClick={() => setShowComposer(true)}
-          >
-            <div className="i-lucide:edit text-gray-600" />
-          </button>
-          
-          <div className="h-6 w-px bg-gray-200" />
-          
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-medium">
-              {username.charAt(0).toUpperCase()}
-            </div>
-            <button
-              onClick={logout}
-              className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+        <span className="font-semibold text-lg">{config.appName}</span>
+      </div>
       
-      {showComposer && (
-        <MessageComposer onClose={() => setShowComposer(false)} />
-      )}
-    </>
+      {/* Search Bar - Central and prominent */}
+      <div className="flex-1 max-w-2xl mx-auto">
+        <div className="relative">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 i-lucide:search text-[var(--text-tertiary)]" />
+          <input
+            ref={searchRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search messages... (⌘K)"
+            className="search-input w-full pl-10 pr-4 py-2 rounded-lg text-sm"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => onSearchChange('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded"
+            >
+              <div className="i-lucide:x text-sm" />
+            </button>
+          )}
+        </div>
+      </div>
+      
+      {/* Right side actions */}
+      <div className="flex items-center gap-2">
+        {/* Compose Button */}
+        <button
+          onClick={onCompose}
+          className="compose-btn px-4 py-2 rounded-lg flex items-center gap-2"
+        >
+          <div className="i-lucide:edit-3" />
+          <span>New message</span>
+        </button>
+        
+        {/* User Menu */}
+        <div className="flex items-center gap-3 ml-4">
+          <div className="w-8 h-8 bg-[var(--proton-purple)] rounded-full flex items-center justify-center text-sm font-medium">
+            {firstLetter}
+          </div>
+          <span className="text-sm text-[var(--text-secondary)]">{username}</span>
+        </div>
+        
+        {/* Settings */}
+        <button
+          onClick={onSettings}
+          className="settings-btn p-2 rounded-lg ml-2"
+          title="Settings"
+        >
+          <div className="i-lucide:settings" />
+        </button>
+      </div>
+    </header>
   )
 }
