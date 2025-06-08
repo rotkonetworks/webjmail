@@ -1,62 +1,98 @@
-import React from 'react'
-import { useMailStore } from '../../stores/mailStore'
+import React, { useEffect, useRef } from 'react'
 import { useMailboxes } from '../../hooks/useJMAP'
-import { MailboxItem } from './MailboxItem'
+import { useMailStore } from '../../stores/mailStore'
+import { Mailbox } from '../../api/types'
 
-export function MailboxList() {
+interface Props {
+  onSelect: () => void
+}
+
+export function MailboxList({ onSelect }: Props) {
+  const { data: mailboxes, isLoading } = useMailboxes()
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
   const selectMailbox = useMailStore((state) => state.selectMailbox)
+  const [focusIndex, setFocusIndex] = React.useState(0)
+  const itemsRef = useRef<(HTMLDivElement | null)[]>([])
   
-  const { data: mailboxes, isLoading, error } = useMailboxes()
-
-  if (isLoading) {
-    return (
-      <div className="p-4 text-center">
-        <div className="i-eos-icons:loading animate-spin text-xl text-gray-500" />
-        <p className="mt-2 text-sm text-gray-500">Loading mailboxes...</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="p-4 text-center">
-        <div className="i-lucide:alert-circle text-red-500 text-xl" />
-        <p className="mt-2 text-sm text-red-600">Failed to load mailboxes</p>
-        <p className="text-xs text-gray-500 mt-1">{error.message}</p>
-      </div>
-    )
-  }
-
-  if (!mailboxes || mailboxes.length === 0) {
-    return (
-      <div className="p-4 text-center text-sm text-gray-500">
-        No mailboxes found
-      </div>
-    )
-  }
-
-  const rootMailboxes = mailboxes.filter((m) => !m.parentId)
-  const childrenByParent = mailboxes.reduce((acc, m) => {
-    if (m.parentId) {
-      if (!acc[m.parentId]) acc[m.parentId] = []
-      acc[m.parentId].push(m)
+  const flatMailboxes = React.useMemo(() => {
+    if (!mailboxes) return []
+    return mailboxes.sort((a, b) => {
+      // Prioritize special folders
+      const roleOrder = { inbox: 0, sent: 1, drafts: 2, trash: 3, junk: 4 }
+      const aOrder = a.role ? roleOrder[a.role as keyof typeof roleOrder] ?? 99 : 99
+      const bOrder = b.role ? roleOrder[b.role as keyof typeof roleOrder] ?? 99 : 99
+      return aOrder - bOrder || a.name.localeCompare(b.name)
+    })
+  }, [mailboxes])
+  
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!flatMailboxes.length) return
+      
+      switch (e.key) {
+        case 'j':
+        case 'ArrowDown':
+          e.preventDefault()
+          setFocusIndex(i => Math.min(i + 1, flatMailboxes.length - 1))
+          break
+        case 'k':
+        case 'ArrowUp':
+          e.preventDefault()
+          setFocusIndex(i => Math.max(i - 1, 0))
+          break
+        case 'Enter':
+          e.preventDefault()
+          selectMailbox(flatMailboxes[focusIndex].id)
+          onSelect()
+          break
+      }
     }
-    return acc
-  }, {} as Record<string, typeof mailboxes>)
-
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [flatMailboxes, focusIndex, selectMailbox, onSelect])
+  
+  // Scroll focused item into view
+  useEffect(() => {
+    itemsRef.current[focusIndex]?.scrollIntoView({ block: 'nearest' })
+  }, [focusIndex])
+  
+  if (isLoading) {
+    return <div className="p-4 text-bright-black">Loading mailboxes...</div>
+  }
+  
   return (
-    <div className="flex-1 overflow-y-auto">
-      {rootMailboxes.map((mailbox) => (
-        <MailboxItem
+    <div className="h-full overflow-y-auto">
+      <div className="border-b border-bright-black p-2 text-bright-black">
+        MAILBOXES
+      </div>
+      {flatMailboxes.map((mailbox, index) => (
+        <div
           key={mailbox.id}
-          mailbox={mailbox}
-          children={childrenByParent[mailbox.id] || []}
-          childrenByParent={childrenByParent}
-          isSelected={mailbox.id === selectedMailboxId}
-          onSelect={() => selectMailbox(mailbox.id)}
-          depth={0}
-        />
+          ref={el => itemsRef.current[index] = el}
+          className={`
+            px-4 py-1 cursor-pointer flex items-center justify-between
+            ${index === focusIndex ? 'bg-bright-black' : ''}
+            ${mailbox.id === selectedMailboxId ? 'text-primary' : ''}
+            hover:bg-bright-black
+          `}
+          onClick={() => {
+            selectMailbox(mailbox.id)
+            onSelect()
+          }}
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-bright-black">
+              {mailbox.role === 'inbox' ? '»' : ' '}
+            </span>
+            <span>{mailbox.name}</span>
+          </span>
+          {mailbox.unreadEmails > 0 && (
+            <span className="text-cyan">
+              [{mailbox.unreadEmails}]
+            </span>
+          )}
+        </div>
       ))}
     </div>
   )

@@ -1,16 +1,4 @@
-import { JMAPSession, Email, Mailbox, Thread } from './types'
-
-interface JMAPRequest {
-  using: string[]
-  methodCalls: Array<[string, any, string]>
-  createdIds?: Record<string, string>
-}
-
-interface JMAPResponse {
-  methodResponses: Array<[string, any, string]>
-  createdIds?: Record<string, string>
-  sessionState: string
-}
+import { JMAPSession, Email, Mailbox, Thread, JMAPRequest, JMAPResponse } from './types'
 
 export class JMAPClient {
   private session: JMAPSession | null = null
@@ -36,7 +24,6 @@ export class JMAPClient {
           'Authorization': token,
           'Accept': 'application/json',
         },
-        // Remove credentials to avoid CORS preflight issues
       })
       
       console.log('[JMAP] Authentication response received:', {
@@ -111,6 +98,24 @@ export class JMAPClient {
     }
   }
 
+  private getProxiedUrl(url: string): string {
+    // In development, use the proxy path instead of the full URL
+    if (import.meta.env.DEV) {
+      try {
+        const urlObj = new URL(url)
+        
+        // Check if this is a mail.rotko.net URL
+        if (urlObj.hostname === 'mail.rotko.net') {
+          // Return just the pathname (e.g., /jmap/)
+          return urlObj.pathname
+        }
+      } catch (e) {
+        console.error('[JMAP] Failed to parse URL:', url, e)
+      }
+    }
+    return url
+  }
+
   async request(methodCalls: Array<[string, any, string]>) {
     if (!this.session) {
       console.error('[JMAP] No active session')
@@ -122,14 +127,18 @@ export class JMAPClient {
       methodCalls,
     }
 
+    // Use the proxied URL in development
+    const apiUrl = this.getProxiedUrl(this.session.apiUrl)
+
     console.log('[JMAP] Sending request:', {
-      url: this.session.apiUrl,
+      url: apiUrl,
+      originalUrl: this.session.apiUrl,
       methods: methodCalls.map(([method]) => method),
       using: request.using
     })
 
     try {
-      const response = await fetch(this.session.apiUrl, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Authorization': this.accessToken,
@@ -290,6 +299,29 @@ export class JMAPClient {
     return this.setEmail(accountId, update)
   }
 
+  async sendEmail(
+    accountId: string,
+    email: any,
+    submission: any
+  ) {
+    console.log('[JMAP] Sending email:', { accountId, email })
+    
+    const responses = await this.request([
+      ['Email/set', { accountId, create: { draft: email } }, '0'],
+      ['EmailSubmission/set', { 
+        accountId, 
+        create: { 
+          submission: {
+            ...submission,
+            emailId: '#draft',
+          }
+        }
+      }, '1'],
+    ])
+    
+    return responses
+  }
+
   getSession() {
     return this.session
   }
@@ -297,12 +329,15 @@ export class JMAPClient {
   getBlobUrl(accountId: string, blobId: string, type: string, name: string) {
     if (!this.session) throw new Error('Not authenticated')
     
-    // Stalwart uses a specific download URL format
-    const url = this.session.downloadUrl
+    // Build the download URL
+    let url = this.session.downloadUrl
       .replace('{accountId}', encodeURIComponent(accountId))
       .replace('{blobId}', encodeURIComponent(blobId))
       .replace('{type}', encodeURIComponent(type))
       .replace('{name}', encodeURIComponent(name))
+    
+    // Use proxy in development
+    url = this.getProxiedUrl(url)
     
     // Add auth token as query parameter for Stalwart
     const separator = url.includes('?') ? '&' : '?'
@@ -313,10 +348,13 @@ export class JMAPClient {
   createEventSource(types: string[] = ['*']): EventSource {
     if (!this.session) throw new Error('Not authenticated')
     
-    const url = this.session.eventSourceUrl
+    let url = this.session.eventSourceUrl
       .replace('{types}', types.join(','))
       .replace('{closeafter}', 'no')
       .replace('{ping}', '30')
+    
+    // Use proxy in development
+    url = this.getProxiedUrl(url)
     
     // Note: EventSource doesn't support custom headers, so auth must be in URL
     const separator = url.includes('?') ? '&' : '?'

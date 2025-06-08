@@ -1,14 +1,7 @@
 import React from 'react'
-
-interface Mailbox {
-  id: string
-  name: string
-  parentId: string | null
-  role: string | null
-  totalEmails: number
-  unreadEmails: number
-  sortOrder: number
-}
+import { useMailboxes } from '../../hooks/useJMAP'
+import { useMailStore } from '../../stores/mailStore'
+import { Mailbox } from '../../api/types'
 
 interface MailboxItemProps {
   mailbox: Mailbox
@@ -105,19 +98,63 @@ export function MailboxItem({
 }
 
 export function Sidebar() {
-  // Mock data for demonstration
-  const mailboxes: Mailbox[] = [
-    { id: '1', name: 'Inbox', parentId: null, role: 'inbox', totalEmails: 523, unreadEmails: 12, sortOrder: 1 },
-    { id: '2', name: 'Sent', parentId: null, role: 'sent', totalEmails: 234, unreadEmails: 0, sortOrder: 2 },
-    { id: '3', name: 'Drafts', parentId: null, role: 'drafts', totalEmails: 5, unreadEmails: 0, sortOrder: 3 },
-    { id: '4', name: 'Archive', parentId: null, role: 'archive', totalEmails: 1832, unreadEmails: 0, sortOrder: 4 },
-    { id: '5', name: 'Trash', parentId: null, role: 'trash', totalEmails: 43, unreadEmails: 0, sortOrder: 5 },
-    { id: '6', name: 'Work', parentId: null, role: null, totalEmails: 156, unreadEmails: 3, sortOrder: 10 },
-    { id: '7', name: 'Projects', parentId: '6', role: null, totalEmails: 89, unreadEmails: 2, sortOrder: 1 },
-    { id: '8', name: 'Personal', parentId: null, role: null, totalEmails: 234, unreadEmails: 1, sortOrder: 11 },
-  ]
+  const { data: mailboxes, isLoading, error } = useMailboxes()
+  const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
+  const selectMailbox = useMailStore((state) => state.selectMailbox)
   
-  const [selectedId, setSelectedId] = React.useState('1')
+  // Auto-select inbox if no mailbox is selected
+  React.useEffect(() => {
+    if (!selectedMailboxId && mailboxes && mailboxes.length > 0) {
+      const inbox = mailboxes.find(m => m.role === 'inbox')
+      if (inbox) {
+        selectMailbox(inbox.id)
+      } else if (mailboxes.length > 0) {
+        selectMailbox(mailboxes[0].id)
+      }
+    }
+  }, [mailboxes, selectedMailboxId, selectMailbox])
+  
+  if (isLoading) {
+    return (
+      <div className="w-full h-full flex flex-col bg-gray-50">
+        <div className="p-4 border-b border-gray-200">
+          <h2 className="font-semibold text-gray-900">Mailboxes</h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="i-eos-icons:loading animate-spin text-xl text-gray-500" />
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="w-full h-full flex flex-col bg-gray-50">
+        <div className="p-4 border-b border-gray-200">
+          <h2 className="font-semibold text-gray-900">Mailboxes</h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="i-lucide:alert-circle text-red-500 text-xl mb-2" />
+            <p className="text-sm text-red-600">Failed to load mailboxes</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!mailboxes || mailboxes.length === 0) {
+    return (
+      <div className="w-full h-full flex flex-col bg-gray-50">
+        <div className="p-4 border-b border-gray-200">
+          <h2 className="font-semibold text-gray-900">Mailboxes</h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <p className="text-sm text-gray-500">No mailboxes found</p>
+        </div>
+      </div>
+    )
+  }
   
   const rootMailboxes = mailboxes.filter(m => !m.parentId)
   const childrenByParent = mailboxes.reduce((acc, m) => {
@@ -126,7 +163,7 @@ export function Sidebar() {
       acc[m.parentId].push(m)
     }
     return acc
-  }, {} as Record<string, Mailbox[]>)
+  }, {} as Record<string, typeof mailboxes>)
   
   return (
     <div className="w-full h-full flex flex-col bg-gray-50">
@@ -143,8 +180,8 @@ export function Sidebar() {
               mailbox={mailbox}
               children={childrenByParent[mailbox.id] || []}
               childrenByParent={childrenByParent}
-              isSelected={mailbox.id === selectedId}
-              onSelect={() => setSelectedId(mailbox.id)}
+              isSelected={mailbox.id === selectedMailboxId}
+              onSelect={() => selectMailbox(mailbox.id)}
               depth={0}
             />
           ))}
@@ -152,8 +189,8 @@ export function Sidebar() {
       
       <div className="p-4 border-t border-gray-200">
         <button className="btn w-full justify-center">
-          <div className="i-lucide:plus mr-2" />
-          New Mailbox
+          <div className="i-lucide:edit mr-2" />
+          Compose
         </button>
       </div>
     </div>

@@ -13,6 +13,8 @@ interface MailState {
   selectMailbox: (mailboxId: string | null) => void
   selectEmail: (emailId: string | null) => void
   updateEmail: (emailId: string, updates: Partial<Email>) => void
+  deleteEmail: (emailId: string) => void
+  clearEmails: () => void
 }
 
 export const useMailStore = create<MailState>()(
@@ -51,8 +53,40 @@ export const useMailStore = create<MailState>()(
     updateEmail: (emailId, updates) =>
       set((state) => {
         if (state.emails[emailId]) {
-          Object.assign(state.emails[emailId], updates)
+          // Deep merge updates
+          if (updates.keywords) {
+            state.emails[emailId].keywords = {
+              ...state.emails[emailId].keywords,
+              ...updates.keywords,
+            }
+          }
+          if (updates.mailboxIds) {
+            state.emails[emailId].mailboxIds = {
+              ...state.emails[emailId].mailboxIds,
+              ...updates.mailboxIds,
+            }
+          }
+          // Apply other updates
+          Object.keys(updates).forEach((key) => {
+            if (key !== 'keywords' && key !== 'mailboxIds') {
+              (state.emails[emailId] as any)[key] = updates[key as keyof Email]
+            }
+          })
         }
+      }),
+
+    deleteEmail: (emailId) =>
+      set((state) => {
+        delete state.emails[emailId]
+        if (state.selectedEmailId === emailId) {
+          state.selectedEmailId = null
+        }
+      }),
+
+    clearEmails: () =>
+      set((state) => {
+        state.emails = {}
+        state.selectedEmailId = null
       }),
   }))
 )

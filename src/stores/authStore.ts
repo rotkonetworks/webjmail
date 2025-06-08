@@ -11,9 +11,12 @@ interface AuthState {
     username: string
     password: string
   } | null
+  isLoading: boolean
+  error: string | null
   login: (server: string, username: string, password: string) => Promise<void>
   logout: () => void
   restoreSession: () => Promise<void>
+  clearError: () => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -22,17 +25,28 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       session: null,
       credentials: null,
+      isLoading: false,
+      error: null,
 
       login: async (server, username, password) => {
+        set({ isLoading: true, error: null })
         try {
           const session = await jmapClient.authenticate(server, username, password)
           set({
             isAuthenticated: true,
             session,
             credentials: { server, username, password },
+            isLoading: false,
+            error: null,
           })
         } catch (error) {
-          set({ isAuthenticated: false, session: null, credentials: null })
+          set({ 
+            isAuthenticated: false, 
+            session: null, 
+            credentials: null,
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Login failed',
+          })
           throw error
         }
       },
@@ -42,8 +56,11 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           session: null,
           credentials: null,
+          error: null,
         })
       },
+
+      clearError: () => set({ error: null }),
 
       restoreSession: async () => {
         const { credentials } = get()
@@ -56,6 +73,7 @@ export const useAuthStore = create<AuthState>()(
             )
           } catch (error) {
             console.error('Failed to restore session:', error)
+            // Don't throw here, just log and continue
           }
         }
       },

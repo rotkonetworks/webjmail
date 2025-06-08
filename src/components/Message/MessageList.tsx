@@ -1,98 +1,117 @@
-import React from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
-import { useMailStore } from '../../stores/mailStore'
+import React, { useEffect, useRef } from 'react'
 import { useEmails } from '../../hooks/useJMAP'
-import { MessageItem } from './MessageItem'
+import { useMailStore } from '../../stores/mailStore'
+import { format } from 'date-fns'
 
-export function MessageList() {
-  const parentRef = React.useRef<HTMLDivElement>(null)
+interface Props {
+  onSelect: () => void
+}
+
+export function MessageList({ onSelect }: Props) {
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
+  const { data: emails, isLoading } = useEmails(selectedMailboxId)
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
+  const [focusIndex, setFocusIndex] = React.useState(0)
+  const itemsRef = useRef<(HTMLDivElement | null)[]>([])
   
-  const { data: emails, isLoading, error } = useEmails(selectedMailboxId)
-
-  const virtualizer = useVirtualizer({
-    count: emails?.length || 0,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 96,
-    overscan: 5,
-  })
-
-  if (!selectedMailboxId) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
-        <div className="text-center">
-          <div className="i-lucide:inbox text-4xl mb-2" />
-          <p>Select a mailbox to view messages</p>
-        </div>
-      </div>
-    )
-  }
-
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!emails?.length) return
+      
+      switch (e.key) {
+        case 'j':
+        case 'ArrowDown':
+          e.preventDefault()
+          setFocusIndex(i => Math.min(i + 1, emails.length - 1))
+          break
+        case 'k':
+        case 'ArrowUp':
+          e.preventDefault()
+          setFocusIndex(i => Math.max(i - 1, 0))
+          break
+        case 'Enter':
+          e.preventDefault()
+          selectEmail(emails[focusIndex].id)
+          onSelect()
+          break
+        case 'd':
+          // Delete/archive
+          break
+        case 'r':
+          // Mark as read/unread
+          break
+        case 's':
+          // Star/flag
+          break
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [emails, focusIndex, selectEmail, onSelect])
+  
+  // Scroll focused item into view
+  useEffect(() => {
+    itemsRef.current[focusIndex]?.scrollIntoView({ block: 'nearest' })
+  }, [focusIndex])
+  
   if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <div className="i-eos-icons:loading animate-spin text-3xl text-primary" />
-          <p className="mt-2 text-sm text-gray-500">Loading messages...</p>
-        </div>
-      </div>
-    )
+    return <div className="p-4 text-bright-black">Loading messages...</div>
   }
-
-  if (error) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <div className="i-lucide:alert-circle text-red-500 text-3xl" />
-          <p className="mt-2 text-sm text-red-600">Failed to load messages</p>
-          <p className="text-xs text-gray-500 mt-1">{error.message}</p>
-        </div>
-      </div>
-    )
+  
+  if (!emails?.length) {
+    return <div className="p-4 text-bright-black">No messages</div>
   }
-
-  if (!emails || emails.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
-        <div className="text-center">
-          <div className="i-lucide:mail text-4xl mb-2" />
-          <p>No messages in this mailbox</p>
-        </div>
-      </div>
-    )
-  }
-
+  
   return (
-    <div ref={parentRef} className="flex-1 overflow-y-auto">
-      <div
-        className="relative"
-        style={{ height: `${virtualizer.getTotalSize()}px` }}
-      >
-        {virtualizer.getVirtualItems().map((virtualItem) => {
-          const email = emails[virtualItem.index]
-          return (
-            <div
-              key={virtualItem.key}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: `${virtualItem.size}px`,
-                transform: `translateY(${virtualItem.start}px)`,
-              }}
-            >
-              <MessageItem
-                email={email}
-                isSelected={email.id === selectedEmailId}
-                onClick={() => selectEmail(email.id)}
-              />
-            </div>
-          )
-        })}
+    <div className="h-full overflow-y-auto">
+      <div className="border-b border-bright-black p-2 text-bright-black flex justify-between">
+        <span>MESSAGES</span>
+        <span>{emails.length} total</span>
       </div>
+      {emails.map((email, index) => {
+        const isUnread = !email.keywords.$seen
+        const isFlagged = email.keywords.$flagged
+        const sender = email.from?.[0]
+        const date = new Date(email.receivedAt)
+        const isToday = date.toDateString() === new Date().toDateString()
+        
+        return (
+          <div
+            key={email.id}
+            ref={el => itemsRef.current[index] = el}
+            className={`
+              px-4 py-1 cursor-pointer border-b border-bright-black
+              ${index === focusIndex ? 'bg-bright-black' : ''}
+              ${email.id === selectedEmailId ? 'text-primary' : ''}
+              hover:bg-bright-black
+            `}
+            onClick={() => {
+              selectEmail(email.id)
+              onSelect()
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-4 text-center">
+                {isUnread && <span className="text-cyan">●</span>}
+              </span>
+              <span className="w-4 text-center">
+                {isFlagged && <span className="text-yellow">★</span>}
+              </span>
+              <span className="w-32 truncate text-green">
+                {sender?.name || sender?.email || 'Unknown'}
+              </span>
+              <span className="flex-1 truncate">
+                {email.subject || '(no subject)'}
+              </span>
+              <span className="text-bright-black">
+                {isToday ? format(date, 'HH:mm') : format(date, 'MM/dd')}
+              </span>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
