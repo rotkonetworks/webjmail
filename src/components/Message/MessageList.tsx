@@ -1,5 +1,6 @@
 import React, { useMemo, useEffect, useRef, useState } from 'react'
 import { useEmails, useEmailSearch } from '../../hooks/useJMAP'
+import { useOfflineEmails, useOfflineSearch } from '../../hooks/useIndexedDB'
 import { useMailStore } from '../../stores/mailStore'
 import { format, isToday, isYesterday } from 'date-fns'
 
@@ -11,14 +12,21 @@ interface MessageListProps {
 
 export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }: MessageListProps) {
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
+  
+  // Use offline-first email loading
   const { 
-    emails, 
-    isLoading, 
+    data: offlineData,
+    isLoading,
+    refetch
+  } = useOfflineEmails(selectedMailboxId)
+  
+  // Fallback to online for infinite scroll if needed
+  const { 
+    emails: onlineEmails, 
     isFetchingNextPage,
     hasMore,
-    total,
+    total: onlineTotal,
     fetchNextPage,
-    refetch
   } = useEmails(selectedMailboxId)
   
   const [searchDebounce, setSearchDebounce] = useState('')
@@ -32,7 +40,13 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     return () => clearTimeout(timer)
   }, [searchQuery])
   
-  // Server search
+  // Offline search first
+  const { data: offlineSearchResults } = useOfflineSearch(
+    searchDebounce,
+    searchDebounce.length > 2 && !showServerSearch
+  )
+  
+  // Server search as fallback
   const { data: serverSearchResults, isFetching: isSearching } = useEmailSearch(
     searchDebounce, 
     showServerSearch
@@ -76,29 +90,36 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     }
   }, [selectedEmailId, onSelectEmail])
   
-  // Filter emails locally first
+  // Determine data source with offline-first approach
+  const emails = offlineData?.emails || onlineEmails || []
+  const total = offlineData?.total || onlineTotal || 0
+  const fromCache = offlineData?.fromCache || false
+  
+  // Filter emails with offline-first search
   const filteredEmails = useMemo(() => {
-    const emailList = showServerSearch ? serverSearchResults : emails
-    if (!emailList) return []
-    
-    let filtered = [...emailList]
-    
-    // Local filter only if not using server search
-    if (searchQuery && !showServerSearch) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(email => 
-        email.subject?.toLowerCase().includes(query) ||
-        email.from?.[0]?.email?.toLowerCase().includes(query) ||
-        email.from?.[0]?.name?.toLowerCase().includes(query) ||
-        email.preview?.toLowerCase().includes(query)
-      )
+    // Use search results if searching
+    if (searchDebounce) {
+      if (showServerSearch && serverSearchResults) {
+        return serverSearchResults
+      } else if (offlineSearchResults) {
+        return offlineSearchResults
+      } else if (!showServerSearch) {
+        // Local filter as fallback
+        const query = searchDebounce.toLowerCase()
+        return emails.filter(email => 
+          email.subject?.toLowerCase().includes(query) ||
+          email.from?.[0]?.email?.toLowerCase().includes(query) ||
+          email.from?.[0]?.name?.toLowerCase().includes(query) ||
+          email.preview?.toLowerCase().includes(query)
+        )
+      }
     }
     
-    // Sort by date
-    return filtered.sort((a, b) => 
+    // Return all emails if not searching
+    return emails.sort((a, b) => 
       new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
     )
-  }, [emails, serverSearchResults, searchQuery, showServerSearch])
+  }, [emails, offlineSearchResults, serverSearchResults, searchDebounce, showServerSearch])
   
   // Auto-enable server search if local results are insufficient
   useEffect(() => {
@@ -173,12 +194,19 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
               <div className="i-lucide:search inline mr-1" />
               {isSearching ? 'Searching...' : `${filteredEmails.length} results`}
             </>
+          ) : searchDebounce && offlineSearchResults ? (
+            <>
+              <div className="i-lucide:database inline mr-1" />
+              {filteredEmails.length} offline results
+            </>
           ) : total > 0 ? (
             <>
+              {fromCache && <div className="i-lucide:database inline mr-1" title="From cache" />}
               {filteredEmails.length} of {total} {total === 1 ? 'conversation' : 'conversations'}
             </>
           ) : (
             <>
+              {fromCache && <div className="i-lucide:database inline mr-1" title="From cache" />}
               {filteredEmails.length} {filteredEmails.length === 1 ? 'conversation' : 'conversations'}
             </>
           )}
