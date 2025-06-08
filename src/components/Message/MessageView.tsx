@@ -41,16 +41,18 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
   // Expand latest email by default
   useEffect(() => {
     if (email && threadEmails && threadEmails.length > 0) {
-      // Find the current email in the thread
-      const currentIndex = threadEmails.findIndex(e => e.id === email.id)
-      if (currentIndex >= 0) {
-        setExpandedEmails(new Set([email.id]))
-        // Scroll to current email after render
-        setTimeout(() => {
-          const element = emailRefs.current.get(email.id)
-          element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }, 100)
-      }
+      // Sort thread emails by receivedAt (newest first) and expand the newest one
+      const sortedThreadEmails = [...threadEmails].sort((a, b) => 
+        new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      )
+      const newestEmail = sortedThreadEmails[0]
+      
+      setExpandedEmails(new Set([newestEmail.id]))
+      // Scroll to newest email after render
+      setTimeout(() => {
+        const element = emailRefs.current.get(newestEmail.id)
+        element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
     }
   }, [email?.id, threadEmails])
   
@@ -152,7 +154,10 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
   }
   
   // Use thread emails if available, otherwise just the current email
-  const displayEmails = threadEmails || [email]
+  // Sort emails by receivedAt (newest first)
+  const displayEmails = (threadEmails || [email]).sort((a, b) => 
+    new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+  )
   
   return (
     <>
@@ -353,8 +358,11 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
           <div className="w-16 bg-[var(--bg-secondary)] border-l border-[var(--border-color)] p-2">
             <div className="text-xs text-[var(--text-tertiary)] text-center mb-2">Timeline</div>
             <div className="relative h-full">
-              {displayEmails.map((threadEmail, index) => {
-                const position = (index / (displayEmails.length - 1)) * 100
+              {/* Create chronological timeline (oldest to newest) for visual clarity */}
+              {[...displayEmails].sort((a, b) => 
+                new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime()
+              ).map((threadEmail, index, chronologicalEmails) => {
+                const position = (index / (chronologicalEmails.length - 1)) * 100
                 const date = new Date(threadEmail.receivedAt)
                 const isCurrent = threadEmail.id === email.id
                 

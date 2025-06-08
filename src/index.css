@@ -17,8 +17,8 @@
   --bg-secondary: #1e1f1c;
   --bg-tertiary: #383a3e;
   --text-primary: #f8f8f2;
-  --text-secondary: #a6a6a0;
-  --text-tertiary: #75715e;
+  --text-secondary: #d3d3d3;
+  --text-tertiary: #a6a6a0;
   --border-color: #414339;
   
   /* Monokai accent colors */
@@ -99,8 +99,8 @@
     --bg-secondary: #1e1f1c;
     --bg-tertiary: #383a3e;
     --text-primary: #f8f8f2;
-    --text-secondary: #a6a6a0;
-    --text-tertiary: #75715e;
+    --text-secondary: #d3d3d3;
+    --text-tertiary: #a6a6a0;
     --border-color: #414339;
     --accent-pink: #f92672;
     --accent-green: #a6e22e;

@@ -35,10 +35,10 @@ export function Sidebar() {
     switch (role) {
       case 'inbox': return 'text-[var(--proton-purple)]'
       case 'sent': return 'text-[var(--accent-blue)]'
-      case 'drafts': return 'text-[var(--text-tertiary)]'
+      case 'drafts': return 'text-[var(--accent-yellow)]'
       case 'trash': return 'text-red-400'
       case 'junk': return 'text-orange-400'
-      default: return 'text-[var(--text-secondary)]'
+      default: return 'text-[var(--accent-cyan)]'
     }
   }
   
@@ -63,8 +63,8 @@ export function Sidebar() {
               onClick={() => selectMailbox(mailbox.id)}
               className={`
                 w-full px-4 py-2.5 flex items-center gap-3 text-left transition-all
-                hover:bg-white/5
-                ${isSelected ? 'bg-[var(--proton-purple)]/10 text-[var(--proton-purple)]' : 'text-[var(--text-secondary)]'}
+                hover:bg-white/10
+                ${isSelected ? 'bg-[var(--proton-purple)]/10 text-[var(--proton-purple)]' : 'text-[var(--text-primary)]'}
               `}
             >
               <div className={`${getMailboxIcon(mailbox.role)} ${isSelected ? '' : getMailboxColor(mailbox.role)}`} />
@@ -72,7 +72,7 @@ export function Sidebar() {
               {mailbox.unreadEmails > 0 && (
                 <span className={`
                   px-2 py-0.5 rounded-full text-xs font-medium
-                  ${isSelected ? 'bg-[var(--proton-purple)] text-white' : 'bg-white/10'}
+                  ${isSelected ? 'bg-[var(--proton-purple)] text-white' : 'bg-[var(--accent-blue)] text-white'}
                 `}>
                   {mailbox.unreadEmails > 999 ? '999+' : mailbox.unreadEmails}
                 </span>
@@ -84,17 +84,17 @@ export function Sidebar() {
       
       {/* Bottom section */}
       <div className="border-t border-[var(--border-color)] p-4">
-        <button className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 rounded transition-all">
+        <button className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-primary)] hover:text-[var(--accent-cyan)] hover:bg-white/10 rounded transition-all">
           <div className="i-lucide:tag" />
           <span className="text-sm">Labels</span>
         </button>
-        <button className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 rounded transition-all">
+        <button className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-primary)] hover:text-[var(--accent-cyan)] hover:bg-white/10 rounded transition-all">
           <div className="i-lucide:folder-plus" />
           <span className="text-sm">Folders</span>
         </button>
         <button 
           onClick={logout}
-          className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-secondary)] hover:text-red-400 hover:bg-red-400/10 rounded transition-all mt-2"
+          className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-primary)] hover:text-red-400 hover:bg-red-400/10 rounded transition-all mt-2"
         >
           <div className="i-lucide:log-out" />
           <span className="text-sm">Sign out</span>
