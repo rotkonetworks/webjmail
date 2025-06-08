@@ -33,12 +33,12 @@ export function Sidebar() {
   
   const getMailboxColor = (role: string | null): string => {
     switch (role) {
-      case 'inbox': return 'text-[var(--proton-purple)]'
-      case 'sent': return 'text-[var(--accent-blue)]'
+      case 'inbox': return 'text-[var(--primary-color)]'
+      case 'sent': return 'text-[var(--accent-cyan)]'
       case 'drafts': return 'text-[var(--accent-yellow)]'
-      case 'trash': return 'text-red-400'
-      case 'junk': return 'text-orange-400'
-      default: return 'text-[var(--accent-cyan)]'
+      case 'trash': return 'text-[var(--accent-pink)]'
+      case 'junk': return 'text-[var(--accent-orange)]'
+      default: return 'text-[var(--accent-green)]'
     }
   }
   
@@ -64,7 +64,7 @@ export function Sidebar() {
               className={`
                 w-full px-4 py-2.5 flex items-center gap-3 text-left transition-all
                 hover:bg-white/10
-                ${isSelected ? 'bg-[var(--proton-purple)]/10 text-[var(--proton-purple)]' : 'text-[var(--text-primary)]'}
+                ${isSelected ? 'bg-[var(--primary-color)]/20 text-[var(--text-primary)] border-r-4 border-[var(--primary-color)]' : 'text-[var(--text-primary)]'}
               `}
             >
               <div className={`${getMailboxIcon(mailbox.role)} ${isSelected ? '' : getMailboxColor(mailbox.role)}`} />
@@ -72,7 +72,7 @@ export function Sidebar() {
               {mailbox.unreadEmails > 0 && (
                 <span className={`
                   px-2 py-0.5 rounded-full text-xs font-medium
-                  ${isSelected ? 'bg-[var(--proton-purple)] text-white' : 'bg-[var(--accent-blue)] text-white'}
+                  ${isSelected ? 'bg-[var(--primary-color)] text-white' : 'bg-[var(--accent-cyan)] text-white'}
                 `}>
                   {mailbox.unreadEmails > 999 ? '999+' : mailbox.unreadEmails}
                 </span>

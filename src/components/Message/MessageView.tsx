@@ -258,7 +258,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                           {/* Avatar */}
                           <div className={`
                             w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0
-                            ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-purple)]'}
+                            ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
                           `}>
                             {(sender?.name || sender?.email || 'U').charAt(0).toUpperCase()}
                           </div>
@@ -376,7 +376,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                   >
                     <div className={`
                       w-3 h-3 rounded-full group-hover:scale-150 transition-transform
-                      ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-purple)]'}
+                      ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
                     `} />
                     <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap text-xs bg-black/80 px-2 py-1 rounded">
                       {format(date, 'MMM d')}
