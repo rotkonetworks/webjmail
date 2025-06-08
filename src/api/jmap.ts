@@ -252,18 +252,21 @@ export class JMAPClient {
     return responses
   }
 
-  async setEmail(accountId: string, update: any) {
-    console.log('[JMAP] Setting email:', { accountId, update })
+  async setEmail(
+    accountId: string,
+    update: Record<string, Partial<Email>>
+  ) {
+    console.log('[JMAP] Updating emails:', { accountId, updates: Object.keys(update) })
 
     const responses = await this.request([
-      ['Email/set', { 
-        accountId,
-        update
-      }, '0'],
+      ['Email/set', { accountId, update }, '0'],
     ])
 
-    const [, result] = responses[0]
-    console.log('[JMAP] Email set result:', result)
+    const result = responses[0][1]
+    console.log('[JMAP] Email update result:', {
+      updated: Object.keys(result.updated || {}),
+      notUpdated: Object.keys(result.notUpdated || {})
+    })
 
     return result
   }
