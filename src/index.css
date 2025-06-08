@@ -460,3 +460,32 @@ input[type="radio"]:checked::after {
   background-color: var(--bg-tertiary);
   font-weight: 600;
 }
+
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Thread timeline scrollbar */
+.timeline-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.timeline-scrollbar::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+.timeline-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 5px;
+}
+
+.timeline-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}

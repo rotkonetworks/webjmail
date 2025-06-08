@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useMailStore } from '../../stores/mailStore'
-import { useMarkAsRead, useFlagEmail, useDeleteEmail, usePrimaryAccountId } from '../../hooks/useJMAP'
+import { useMarkAsRead, useFlagEmail, useDeleteEmail, usePrimaryAccountId, useEmailThread } from '../../hooks/useJMAP'
 import { MessageComposer } from './MessageComposer'
 import DOMPurify from 'dompurify'
 import { format } from 'date-fns'
+import { jmapClient } from '../../api/jmap'
 
 interface MessageViewProps {
   onClose?: () => void
@@ -27,6 +28,9 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
   const timelineRef = useRef<HTMLDivElement>(null)
   const emailRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   
+  // Fetch thread emails
+  const { data: threadEmails } = useEmailThread(email?.threadId || null)
+  
   // Mark as read
   useEffect(() => {
     if (email && !email.keywords.$seen && accountId) {
@@ -34,15 +38,21 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
     }
   }, [email?.id])
   
-  // Get all emails in thread (mock data for now - in real app would fetch thread)
-  const threadEmails = email ? [email] : []
-  
   // Expand latest email by default
   useEffect(() => {
-    if (email && threadEmails.length > 0) {
-      setExpandedEmails(new Set([threadEmails[0].id]))
+    if (email && threadEmails && threadEmails.length > 0) {
+      // Find the current email in the thread
+      const currentIndex = threadEmails.findIndex(e => e.id === email.id)
+      if (currentIndex >= 0) {
+        setExpandedEmails(new Set([email.id]))
+        // Scroll to current email after render
+        setTimeout(() => {
+          const element = emailRefs.current.get(email.id)
+          element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 100)
+      }
     }
-  }, [email?.id])
+  }, [email?.id, threadEmails])
   
   if (!email || !accountId) return null
   
@@ -84,6 +94,35 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
     element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
   
+  const handleDownloadAttachment = (attachment: any) => {
+    if (!accountId || !attachment.blobId) return
+    
+    const url = jmapClient.getBlobUrl(
+      accountId,
+      attachment.blobId,
+      attachment.type || 'application/octet-stream',
+      attachment.name || 'attachment'
+    )
+    
+    window.open(url, '_blank')
+  }
+  
+  const getAttachmentIcon = (type: string) => {
+    if (type.startsWith('image/')) return 'i-lucide:image'
+    if (type.startsWith('video/')) return 'i-lucide:video'
+    if (type.includes('pdf')) return 'i-lucide:file-text'
+    if (type.includes('zip') || type.includes('archive')) return 'i-lucide:archive'
+    if (type.includes('sheet') || type.includes('excel')) return 'i-lucide:table'
+    if (type.includes('doc') || type.includes('word')) return 'i-lucide:file-text'
+    return 'i-lucide:file'
+  }
+  
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB'
+    return Math.round(bytes / (1024 * 1024) * 10) / 10 + ' MB'
+  }
+  
   const renderEmailContent = (email: any) => {
     const htmlBody = email.htmlBody?.[0]
     const textBody = email.textBody?.[0]
@@ -112,6 +151,9 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
     return <pre className="whitespace-pre-wrap font-sans text-[var(--text-primary)]">{bodyValue.value}</pre>
   }
   
+  // Use thread emails if available, otherwise just the current email
+  const displayEmails = threadEmails || [email]
+  
   return (
     <>
       <div className="h-full flex">
@@ -134,6 +176,12 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
               <h2 className="text-lg font-medium text-[var(--text-primary)] ml-2">
                 {email.subject || '(no subject)'}
               </h2>
+              
+              {displayEmails.length > 1 && (
+                <span className="text-sm text-[var(--text-tertiary)] ml-2">
+                  ({displayEmails.length} messages)
+                </span>
+              )}
             </div>
             
             <div className="flex items-center gap-1">
@@ -179,10 +227,11 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
           {/* Email thread */}
           <div className="flex-1 overflow-y-auto timeline-scrollbar" ref={timelineRef}>
             <div className="email-timeline max-w-4xl mx-auto p-6">
-              {threadEmails.map((threadEmail, index) => {
+              {displayEmails.map((threadEmail, index) => {
                 const isExpanded = expandedEmails.has(threadEmail.id)
+                const isCurrent = threadEmail.id === email.id
                 const sender = threadEmail.from?.[0]
-                const isLatest = index === 0
+                const isLatest = index === displayEmails.length - 1
                 
                 return (
                   <div
@@ -193,12 +242,19 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                     {/* Email header */}
                     <div
                       onClick={() => toggleEmailExpansion(threadEmail.id)}
-                      className="bg-[var(--bg-secondary)] rounded-lg p-4 cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors"
+                      className={`
+                        bg-[var(--bg-secondary)] rounded-lg p-4 cursor-pointer 
+                        hover:bg-[var(--bg-tertiary)] transition-colors
+                        ${isCurrent ? 'ring-2 ring-[var(--primary-color)]' : ''}
+                      `}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
                           {/* Avatar */}
-                          <div className="w-10 h-10 bg-[var(--proton-purple)] rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
+                          <div className={`
+                            w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0
+                            ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-purple)]'}
+                          `}>
                             {(sender?.name || sender?.email || 'U').charAt(0).toUpperCase()}
                           </div>
                           
@@ -231,28 +287,54 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                     {/* Email content when expanded */}
                     {isExpanded && (
                       <div className="mt-4 bg-[var(--bg-secondary)] rounded-lg p-6">
-                        {renderEmailContent(threadEmail)}
+                        {/* Recipients info */}
+                        {(threadEmail.to || threadEmail.cc) && (
+                          <div className="mb-4 text-sm text-[var(--text-tertiary)] space-y-1">
+                            {threadEmail.to && threadEmail.to.length > 0 && (
+                              <div>
+                                <span className="font-medium">To:</span>{' '}
+                                {threadEmail.to.map(r => r.name || r.email).join(', ')}
+                              </div>
+                            )}
+                            {threadEmail.cc && threadEmail.cc.length > 0 && (
+                              <div>
+                                <span className="font-medium">Cc:</span>{' '}
+                                {threadEmail.cc.map(r => r.name || r.email).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Email body */}
+                        <div className="mb-6">
+                          {renderEmailContent(threadEmail)}
+                        </div>
                         
                         {/* Attachments */}
                         {threadEmail.attachments && threadEmail.attachments.length > 0 && (
                           <div className="mt-6 pt-6 border-t border-[var(--border-color)]">
-                            <h4 className="text-sm font-medium text-[var(--text-secondary)] mb-3">
+                            <h4 className="text-sm font-medium text-[var(--text-secondary)] mb-3 flex items-center gap-2">
+                              <div className="i-lucide:paperclip" />
                               Attachments ({threadEmail.attachments.length})
                             </h4>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               {threadEmail.attachments.map((attachment: any) => (
-                                <div 
+                                <button
                                   key={attachment.partId}
-                                  className="flex items-center gap-2 p-3 bg-[var(--bg-tertiary)] rounded hover:bg-white/10 cursor-pointer transition-colors"
+                                  onClick={() => handleDownloadAttachment(attachment)}
+                                  className="flex items-center gap-3 p-4 bg-[var(--bg-tertiary)] rounded-lg hover:bg-white/10 transition-colors text-left group"
                                 >
-                                  <div className="i-lucide:paperclip text-[var(--text-tertiary)]" />
+                                  <div className={`${getAttachmentIcon(attachment.type || '')} text-2xl text-[var(--text-secondary)] group-hover:text-[var(--primary-color)]`} />
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm truncate">{attachment.name || 'Untitled'}</p>
+                                    <p className="text-sm font-medium truncate text-[var(--text-primary)]">
+                                      {attachment.name || 'Untitled'}
+                                    </p>
                                     <p className="text-xs text-[var(--text-tertiary)]">
-                                      {Math.round(attachment.size / 1024)} KB
+                                      {formatFileSize(attachment.size)}
                                     </p>
                                   </div>
-                                </div>
+                                  <div className="i-lucide:download text-[var(--text-tertiary)] group-hover:text-[var(--primary-color)]" />
+                                </button>
                               ))}
                             </div>
                           </div>
@@ -266,14 +348,15 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
           </div>
         </div>
         
-        {/* Timeline navigation bar */}
-        {threadEmails.length > 1 && (
+        {/* Timeline navigation bar - only show for threads */}
+        {displayEmails.length > 1 && (
           <div className="w-16 bg-[var(--bg-secondary)] border-l border-[var(--border-color)] p-2">
             <div className="text-xs text-[var(--text-tertiary)] text-center mb-2">Timeline</div>
             <div className="relative h-full">
-              {threadEmails.map((threadEmail, index) => {
-                const position = (index / (threadEmails.length - 1)) * 100
+              {displayEmails.map((threadEmail, index) => {
+                const position = (index / (displayEmails.length - 1)) * 100
                 const date = new Date(threadEmail.receivedAt)
+                const isCurrent = threadEmail.id === email.id
                 
                 return (
                   <button
@@ -283,7 +366,10 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                     style={{ top: `${position}%` }}
                     title={format(date, 'MMM d, HH:mm')}
                   >
-                    <div className="w-3 h-3 bg-[var(--proton-purple)] rounded-full group-hover:scale-150 transition-transform" />
+                    <div className={`
+                      w-3 h-3 rounded-full group-hover:scale-150 transition-transform
+                      ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-purple)]'}
+                    `} />
                     <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap text-xs bg-black/80 px-2 py-1 rounded">
                       {format(date, 'MMM d')}
                     </div>

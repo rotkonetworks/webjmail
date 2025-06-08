@@ -1,3 +1,4 @@
+import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { jmapClient } from '../api/jmap'
 import { useAuthStore } from '../stores/authStore'
@@ -26,24 +27,88 @@ export function useMailboxes() {
   })
 }
 
+export function useEmailSearch(query: string, enabled: boolean) {
+  const accountId = usePrimaryAccountId()
+  const session = useAuthStore((state) => state.session)
+  
+  return useQuery({
+    queryKey: ['search', accountId, query],
+    queryFn: async () => {
+      if (!accountId || !query.trim()) return []
+      return jmapClient.searchEmails(accountId, query)
+    },
+    enabled: !!session && !!accountId && enabled && query.length > 2,
+    staleTime: 30 * 1000, // 30 seconds
+  })
+}
 export function useEmails(mailboxId: string | null) {
   const session = useAuthStore((state) => state.session)
   const accountId = usePrimaryAccountId()
   const setEmails = useMailStore((state) => state.setEmails)
+  const [hasMore, setHasMore] = React.useState(true)
+  const [total, setTotal] = React.useState(0)
 
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: ['emails', accountId, mailboxId],
-    queryFn: async () => {
-      if (!accountId || !mailboxId) return []
+    queryFn: async ({ pageParam = 0 }) => {
+      if (!accountId || !mailboxId) return { emails: [], total: 0, position: 0 }
 
-      const emails = await jmapClient.getEmails(accountId, {
-        inMailbox: mailboxId,
-      })
-      setEmails(emails)
-      return emails
+      const result = await jmapClient.getEmails(
+        accountId,
+        { inMailbox: mailboxId },
+        undefined,
+        pageParam,
+        50
+      )
+      
+      return result
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.reduce((sum, page) => sum + page.emails.length, 0)
+      if (loadedCount >= lastPage.total) {
+        return undefined
+      }
+      return loadedCount
     },
     enabled: !!session && !!accountId && !!mailboxId,
-    staleTime: 1 * 60 * 1000, // 1 minute
+    staleTime: 1 * 60 * 1000,
+  })
+
+  // Update store when data changes
+  React.useEffect(() => {
+    if (query.data) {
+      const allEmails = query.data.pages.flatMap(page => page.emails)
+      setEmails(allEmails)
+      
+      const lastPage = query.data.pages[query.data.pages.length - 1]
+      setTotal(lastPage.total)
+      setHasMore(query.hasNextPage ?? false)
+    }
+  }, [query.data, setEmails])
+
+  return {
+    emails: query.data?.pages.flatMap(page => page.emails) ?? [],
+    isLoading: query.isLoading,
+    isFetchingNextPage: query.isFetchingNextPage,
+    hasMore,
+    total,
+    fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
+  }
+}
+
+export function useEmailThread(threadId: string | null) {
+  const accountId = usePrimaryAccountId()
+  const session = useAuthStore((state) => state.session)
+
+  return useQuery({
+    queryKey: ['thread', accountId, threadId],
+    queryFn: async () => {
+      if (!accountId || !threadId) return []
+      return jmapClient.getEmailThread(accountId, threadId)
+    },
+    enabled: !!session && !!accountId && !!threadId,
+    staleTime: 2 * 60 * 1000,
   })
 }
 
