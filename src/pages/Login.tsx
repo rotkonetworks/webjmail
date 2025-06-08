@@ -1,38 +1,54 @@
-import React, { useState } from 'react'
-
-interface AuthStore {
-  login: (server: string, username: string, password: string) => Promise<void>
-}
-
-// Mock store for demo - in real app this would be imported
-const useAuthStore = (): { login: AuthStore['login'] } => ({
-  login: async (server, username, password) => {
-    console.log('Login:', { server, username, password })
-  }
-})
+import React, { useState, useEffect } from 'react'
+import { useAuthStore } from '../stores/authStore'
+import { config, serverPresets } from '../config'
 
 export function Login() {
-  const [server, setServer] = useState('https://jmap.fastmail.com/.well-known/jmap')
+  // Use the default server from config
+  const [server, setServer] = useState(config.defaultServer)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [localError, setLocalError] = useState('')
   
-  const { login } = useAuthStore()
+  const { login, isLoading, error: authError, clearError } = useAuthStore()
+  
+  // Show auth store errors
+  useEffect(() => {
+    if (authError) {
+      setLocalError(authError)
+      // Clear the error from the store after showing it
+      const timer = setTimeout(() => clearError(), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [authError, clearError])
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    setLoading(true)
+    setLocalError('')
+    
+    // Basic validation
+    if (!server || !username || !password) {
+      setLocalError('Please fill in all fields')
+      return
+    }
+    
+    console.log('[Login] Submitting login form...', { 
+      server, 
+      username,
+      // Log first few chars of password for debugging
+      passwordLength: password.length,
+      passwordPrefix: password.substring(0, 3) + '***'
+    })
     
     try {
       await login(server, username, password)
+      console.log('[Login] Login successful')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
-    } finally {
-      setLoading(false)
+      console.error('[Login] Login error:', err)
+      // Error is already set in the store, just log it here
     }
   }
+  
+  const displayError = localError || authError
   
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -41,10 +57,10 @@ export function Login() {
           <div className="i-lucide:mail text-6xl text-primary" />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          JMAP Email Client
+          Rotko Mail
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          Sign in with your JMAP server credentials
+          Sign in to your Stalwart mail account
         </p>
       </div>
 
@@ -59,16 +75,17 @@ export function Login() {
                 <input
                   id="server"
                   name="server"
-                  type="url"
+                  type="text"
                   required
+                  disabled={isLoading}
                   value={server}
                   onChange={(e) => setServer(e.target.value)}
-                  className="input w-full"
-                  placeholder="https://jmap.example.com/.well-known/jmap"
+                  className="input w-full disabled:opacity-50 disabled:bg-gray-100"
+                  placeholder="/.well-known/jmap or https://mail.rotko.net/.well-known/jmap"
                 />
               </div>
               <p className="mt-1 text-xs text-gray-500">
-                Enter your JMAP server's discovery URL
+                Default: Rotko Stalwart Mail Server (no port needed)
               </p>
             </div>
 
@@ -83,12 +100,17 @@ export function Login() {
                   type="text"
                   autoComplete="username"
                   required
+                  disabled={isLoading}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="input w-full"
-                  placeholder="user@example.com"
+                  className="input w-full disabled:opacity-50 disabled:bg-gray-100"
+                  placeholder="username (without @domain)"
+                  autoFocus
                 />
               </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Enter just the username part (e.g., "peering" not "peering@rotko.net")
+              </p>
             </div>
 
             <div>
@@ -102,21 +124,25 @@ export function Login() {
                   type="password"
                   autoComplete="current-password"
                   required
+                  disabled={isLoading}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="input w-full"
+                  className="input w-full disabled:opacity-50 disabled:bg-gray-100"
                 />
               </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Use an app password from Stalwart if 2FA is enabled
+              </p>
             </div>
 
-            {error && (
+            {displayError && (
               <div className="rounded-md bg-red-50 p-4">
                 <div className="flex">
                   <div className="flex-shrink-0">
                     <div className="i-lucide:x-circle text-red-400" />
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm text-red-800">{error}</p>
+                    <p className="text-sm text-red-800 whitespace-pre-wrap">{displayError}</p>
                   </div>
                 </div>
               </div>
@@ -125,10 +151,10 @@ export function Login() {
             <div>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={isLoading}
                 className="btn w-full flex justify-center items-center"
               >
-                {loading ? (
+                {isLoading ? (
                   <>
                     <div className="i-eos-icons:loading animate-spin mr-2" />
                     Signing in...
@@ -140,55 +166,61 @@ export function Login() {
             </div>
           </form>
 
+          {/* Debug info in development */}
+          {import.meta.env.DEV && (
+            <div className="mt-4 p-3 bg-gray-100 rounded text-xs text-gray-600">
+              <p className="font-semibold mb-1">Debug Info:</p>
+              <p>• Check browser console (F12) for detailed logs</p>
+              <p>• Network tab shows actual HTTP requests</p>
+              <p>• Common issues: CORS, SSL certs, wrong URL format</p>
+              <p>• Username format: just the username, not full email</p>
+            </div>
+          )}
+
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-300" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Popular JMAP Servers</span>
+                <span className="px-2 bg-white text-gray-500">Server Presets</span>
               </div>
             </div>
 
             <div className="mt-6 grid gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setServer('https://jmap.fastmail.com/.well-known/jmap')
-                  setUsername('')
-                  setPassword('')
-                }}
-                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                <div className="i-simple-icons:fastmail mr-2" />
-                Fastmail
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => {
-                  setServer('https://localhost:8080/.well-known/jmap')
-                  setUsername('')
-                  setPassword('')
-                }}
-                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                <div className="i-lucide:server mr-2" />
-                Local Server (Development)
-              </button>
+              {serverPresets.map((preset) => (
+                <button
+                  key={preset.url}
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => {
+                    setServer(preset.url)
+                    setUsername('')
+                    setPassword('')
+                    setLocalError('')
+                  }}
+                  className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="i-lucide:server mr-2" />
+                  <div className="text-left flex-1">
+                    <div>{preset.name}</div>
+                    <div className="text-xs text-gray-500">{preset.description}</div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
 
           <div className="mt-6">
             <p className="text-center text-xs text-gray-500">
-              Need a JMAP account?{' '}
+              Powered by{' '}
               <a
-                href="https://www.fastmail.com/jmap/"
+                href="https://stalw.art/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:text-primary-dark"
               >
-                Learn more about JMAP
+                Stalwart Mail Server
               </a>
             </p>
           </div>

@@ -1,23 +1,43 @@
 import React from 'react'
-import { useAuthStore } from '../../stores/authStore'
 import { useMailStore } from '../../stores/mailStore'
 import { useMailboxes } from '../../hooks/useJMAP'
 import { MailboxItem } from './MailboxItem'
 
 export function MailboxList() {
-  const session = useAuthStore((state) => state.session)
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
   const selectMailbox = useMailStore((state) => state.selectMailbox)
   
-  const primaryAccountId = session?.primaryAccounts['urn:ietf:params:jmap:mail']
-  const { data: mailboxes, isLoading } = useMailboxes(primaryAccountId || '')
+  const { data: mailboxes, isLoading, error } = useMailboxes()
 
   if (isLoading) {
-    return <div className="p-4">Loading mailboxes...</div>
+    return (
+      <div className="p-4 text-center">
+        <div className="i-eos-icons:loading animate-spin text-xl text-gray-500" />
+        <p className="mt-2 text-sm text-gray-500">Loading mailboxes...</p>
+      </div>
+    )
   }
 
-  const rootMailboxes = mailboxes?.filter((m) => !m.parentId) || []
-  const childrenByParent = mailboxes?.reduce((acc, m) => {
+  if (error) {
+    return (
+      <div className="p-4 text-center">
+        <div className="i-lucide:alert-circle text-red-500 text-xl" />
+        <p className="mt-2 text-sm text-red-600">Failed to load mailboxes</p>
+        <p className="text-xs text-gray-500 mt-1">{error.message}</p>
+      </div>
+    )
+  }
+
+  if (!mailboxes || mailboxes.length === 0) {
+    return (
+      <div className="p-4 text-center text-sm text-gray-500">
+        No mailboxes found
+      </div>
+    )
+  }
+
+  const rootMailboxes = mailboxes.filter((m) => !m.parentId)
+  const childrenByParent = mailboxes.reduce((acc, m) => {
     if (m.parentId) {
       if (!acc[m.parentId]) acc[m.parentId] = []
       acc[m.parentId].push(m)
@@ -31,8 +51,8 @@ export function MailboxList() {
         <MailboxItem
           key={mailbox.id}
           mailbox={mailbox}
-          children={childrenByParent?.[mailbox.id] || []}
-          childrenByParent={childrenByParent || {}}
+          children={childrenByParent[mailbox.id] || []}
+          childrenByParent={childrenByParent}
           isSelected={mailbox.id === selectedMailboxId}
           onSelect={() => selectMailbox(mailbox.id)}
           depth={0}

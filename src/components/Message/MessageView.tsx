@@ -1,9 +1,9 @@
 import React from 'react'
 import { format } from 'date-fns'
 import DOMPurify from 'dompurify'
-import { useAuthStore } from '../stores/authStore'
-import { useMailStore } from '../stores/mailStore'
-import { useMarkAsRead } from '../hooks/useJMAP'
+import { useAuthStore } from '../../stores/authStore'
+import { useMailStore } from '../../stores/mailStore'
+import { useMarkAsRead } from '../../hooks/useJMAP'
 
 export function MessageView() {
   const session = useAuthStore((state) => state.session)
@@ -68,13 +68,10 @@ export function MessageView() {
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               title="Mark as unread"
               onClick={() => {
-                if (primaryAccountId) {
-                  markAsRead.mutate({
-                    accountId: primaryAccountId,
-                    emailId: email.id,
-                    isRead: false,
-                  })
-                }
+                markAsRead.mutate({
+                  emailId: email.id,
+                  isRead: false,
+                })
               }}
             >
               <div className="i-lucide:mail text-gray-600" />

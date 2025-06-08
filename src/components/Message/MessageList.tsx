@@ -1,22 +1,16 @@
 import React from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useAuthStore } from '../../stores/authStore'
 import { useMailStore } from '../../stores/mailStore'
 import { useEmails } from '../../hooks/useJMAP'
 import { MessageItem } from './MessageItem'
 
 export function MessageList() {
   const parentRef = React.useRef<HTMLDivElement>(null)
-  const session = useAuthStore((state) => state.session)
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
   
-  const primaryAccountId = session?.primaryAccounts['urn:ietf:params:jmap:mail']
-  const { data: emails, isLoading } = useEmails(
-    primaryAccountId || '',
-    selectedMailboxId
-  )
+  const { data: emails, isLoading, error } = useEmails(selectedMailboxId)
 
   const virtualizer = useVirtualizer({
     count: emails?.length || 0,
@@ -28,7 +22,10 @@ export function MessageList() {
   if (!selectedMailboxId) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-500">
-        Select a mailbox
+        <div className="text-center">
+          <div className="i-lucide:inbox text-4xl mb-2" />
+          <p>Select a mailbox to view messages</p>
+        </div>
       </div>
     )
   }
@@ -36,7 +33,33 @@ export function MessageList() {
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="i-eos-icons:loading animate-spin text-2xl" />
+        <div className="text-center">
+          <div className="i-eos-icons:loading animate-spin text-3xl text-primary" />
+          <p className="mt-2 text-sm text-gray-500">Loading messages...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <div className="i-lucide:alert-circle text-red-500 text-3xl" />
+          <p className="mt-2 text-sm text-red-600">Failed to load messages</p>
+          <p className="text-xs text-gray-500 mt-1">{error.message}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!emails || emails.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-gray-500">
+        <div className="text-center">
+          <div className="i-lucide:mail text-4xl mb-2" />
+          <p>No messages in this mailbox</p>
+        </div>
       </div>
     )
   }
@@ -48,7 +71,7 @@ export function MessageList() {
         style={{ height: `${virtualizer.getTotalSize()}px` }}
       >
         {virtualizer.getVirtualItems().map((virtualItem) => {
-          const email = emails![virtualItem.index]
+          const email = emails[virtualItem.index]
           return (
             <div
               key={virtualItem.key}
