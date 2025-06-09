@@ -1,5 +1,6 @@
-import React, { useMemo, useEffect, useRef } from 'react'
-import { useEmails } from '../../hooks/useJMAP'
+import React, { useMemo, useEffect, useRef, useState } from 'react'
+import { useEmails, useEmailSearch } from '../../hooks/useJMAP'
+import { useOfflineEmails, useOfflineSearch } from '../../hooks/useIndexedDB'
 import { useMailStore } from '../../stores/mailStore'
 import { format, isToday, isYesterday } from 'date-fns'
 
@@ -11,12 +12,69 @@ interface MessageListProps {
 
 export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }: MessageListProps) {
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
-  const { data: emails, isLoading } = useEmails(selectedMailboxId)
+  
+  // Use offline-first email loading
+  const { 
+    data: offlineData,
+    isLoading,
+    refetch
+  } = useOfflineEmails(selectedMailboxId)
+  
+  // Fallback to online for infinite scroll if needed
+  const { 
+    emails: onlineEmails, 
+    isFetchingNextPage,
+    hasMore,
+    total: onlineTotal,
+    fetchNextPage,
+  } = useEmails(selectedMailboxId)
+  
+  const [searchDebounce, setSearchDebounce] = useState('')
+  const [showServerSearch, setShowServerSearch] = useState(false)
+  
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchDebounce(searchQuery)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+  
+  // Offline search first
+  const { data: offlineSearchResults } = useOfflineSearch(
+    searchDebounce,
+    searchDebounce.length > 2 && !showServerSearch
+  )
+  
+  // Server search as fallback
+  const { data: serverSearchResults, isFetching: isSearching } = useEmailSearch(
+    searchDebounce, 
+    showServerSearch
+  )
+  
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
   const listRef = useRef<HTMLDivElement>(null)
+  const loadMoreRef = useRef<HTMLDivElement>(null)
   
-  // Handle Enter key to open selected email
+  // Intersection observer for infinite scroll
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasMore || showServerSearch) return
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isFetchingNextPage) {
+          fetchNextPage()
+        }
+      },
+      { threshold: 0.1 }
+    )
+    
+    observer.observe(loadMoreRef.current)
+    return () => observer.disconnect()
+  }, [hasMore, isFetchingNextPage, fetchNextPage, showServerSearch])
+  
+  // Handle Enter key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && selectedEmailId) {
@@ -25,7 +83,6 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       }
     }
     
-    // Only add listener if the list is focused or contains focus
     const listElement = listRef.current
     if (listElement) {
       listElement.addEventListener('keydown', handleKeyDown)
@@ -33,29 +90,48 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     }
   }, [selectedEmailId, onSelectEmail])
   
+  // Determine data source with offline-first approach
+  const emails = offlineData?.emails || onlineEmails || []
+  const total = offlineData?.total || onlineTotal || 0
+  const fromCache = offlineData?.fromCache || false
   
-  // Filter and sort emails (latest first)
+  // Filter emails with offline-first search
   const filteredEmails = useMemo(() => {
-    if (!emails) return []
-    
-    let filtered = [...emails]
-    
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(email => 
-        email.subject?.toLowerCase().includes(query) ||
-        email.from?.[0]?.email?.toLowerCase().includes(query) ||
-        email.from?.[0]?.name?.toLowerCase().includes(query) ||
-        email.preview?.toLowerCase().includes(query)
-      )
+    // Use search results if searching
+    if (searchDebounce) {
+      if (showServerSearch && serverSearchResults) {
+        return serverSearchResults
+      } else if (offlineSearchResults) {
+        return offlineSearchResults
+      } else if (!showServerSearch) {
+        // Local filter as fallback
+        const query = searchDebounce.toLowerCase()
+        return emails.filter(email => 
+          email.subject?.toLowerCase().includes(query) ||
+          email.from?.[0]?.email?.toLowerCase().includes(query) ||
+          email.from?.[0]?.name?.toLowerCase().includes(query) ||
+          email.preview?.toLowerCase().includes(query)
+        )
+      }
     }
     
-    // Sort by date, latest first
-    return filtered.sort((a, b) => 
+    // Return all emails if not searching
+    return emails.sort((a, b) => 
       new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
     )
-  }, [emails, searchQuery])
+  }, [emails, offlineSearchResults, serverSearchResults, searchDebounce, showServerSearch])
+  
+  // Auto-enable server search if local results are insufficient
+  useEffect(() => {
+    if (searchDebounce && filteredEmails.length === 0 && !showServerSearch && !isLoading) {
+      const timer = setTimeout(() => {
+        setShowServerSearch(true)
+      }, 500)
+      return () => clearTimeout(timer)
+    } else if (!searchDebounce) {
+      setShowServerSearch(false)
+    }
+  }, [searchDebounce, filteredEmails.length, showServerSearch, isLoading])
   
   const formatEmailDate = (dateString: string): string => {
     const date = new Date(dateString)
@@ -90,7 +166,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     )
   }
   
-  if (filteredEmails.length === 0) {
+  if (filteredEmails.length === 0 && !isLoading && !isSearching) {
     return (
       <div className="h-full flex items-center justify-center p-8">
         <div className="text-center">
@@ -100,7 +176,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
           </p>
           {searchQuery && (
             <p className="text-sm text-[var(--text-tertiary)] mt-1">
-              Try a different search term
+              {showServerSearch ? 'No results on server' : 'Searching server...'}
             </p>
           )}
         </div>
@@ -110,14 +186,51 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
   
   return (
     <div className="h-full overflow-y-auto" ref={listRef} tabIndex={0}>
-      {/* Message count header */}
-      <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between sticky top-0 bg-[var(--bg-secondary)] z-10">
         <span className="text-sm text-[var(--text-secondary)]">
-          {filteredEmails.length} {filteredEmails.length === 1 ? 'conversation' : 'conversations'}
+          {showServerSearch ? (
+            <>
+              <div className="i-lucide:search inline mr-1" />
+              {isSearching ? 'Searching...' : `${filteredEmails.length} results`}
+            </>
+          ) : searchDebounce && offlineSearchResults ? (
+            <>
+              <div className="i-lucide:database inline mr-1" />
+              {filteredEmails.length} offline results
+            </>
+          ) : total > 0 ? (
+            <>
+              {fromCache && <div className="i-lucide:database inline mr-1" title="From cache" />}
+              {filteredEmails.length} of {total} {total === 1 ? 'conversation' : 'conversations'}
+            </>
+          ) : (
+            <>
+              {fromCache && <div className="i-lucide:database inline mr-1" title="From cache" />}
+              {filteredEmails.length} {filteredEmails.length === 1 ? 'conversation' : 'conversations'}
+            </>
+          )}
         </span>
-        <button className="p-1 hover:bg-white/10 rounded" title="Refresh">
-          <div className="i-lucide:refresh-cw text-sm" />
-        </button>
+        <div className="flex items-center gap-2">
+          {showServerSearch && (
+            <button 
+              className="text-xs text-[var(--primary-color)] hover:underline" 
+              onClick={() => {
+                setShowServerSearch(false)
+                setSearchDebounce('')
+              }}
+            >
+              Clear search
+            </button>
+          )}
+          <button 
+            className="p-1 hover:bg-white/10 rounded" 
+            title="Refresh"
+            onClick={() => refetch()}
+          >
+            <div className="i-lucide:refresh-cw text-sm" />
+          </button>
+        </div>
       </div>
       
       {/* Email list */}
@@ -185,7 +298,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                   {searchQuery ? highlightText(email.preview, searchQuery) : email.preview}
                 </div>
                 
-                {/* Labels/Tags */}
+                {/* Labels */}
                 <div className="flex items-center gap-2 mt-1">
                   {email.keywords.$flagged && (
                     <span className="label label-pink">
@@ -199,10 +312,16 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                       Attachment
                     </span>
                   )}
+                  {showServerSearch && (
+                    <span className="label label-green">
+                      <div className="i-lucide:search inline w-3 h-3 mr-1" />
+                      Server result
+                    </span>
+                  )}
                 </div>
               </div>
               
-              {/* Row mode: Additional info */}
+              {/* Row mode extras */}
               {viewMode === 'row' && (
                 <div className="flex items-center gap-3 text-[var(--text-tertiary)]">
                   {email.to && email.to.length > 1 && (
@@ -215,6 +334,33 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
           </div>
         )
       })}
+      
+      {/* Load more */}
+      {hasMore && !showServerSearch && (
+        <div ref={loadMoreRef} className="p-4 text-center">
+          {isFetchingNextPage ? (
+            <div className="flex items-center justify-center gap-2 text-[var(--text-tertiary)]">
+              <div className="animate-spin i-eos-icons:loading" />
+              <span className="text-sm">Loading more messages...</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => fetchNextPage()}
+              className="text-sm text-[var(--primary-color)] hover:underline"
+            >
+              Load more
+            </button>
+          )}
+        </div>
+      )}
+      
+      {/* Server search indicator */}
+      {isSearching && (
+        <div className="p-4 text-center text-[var(--text-tertiary)]">
+          <div className="animate-spin i-eos-icons:loading inline mr-2" />
+          <span className="text-sm">Searching server...</span>
+        </div>
+      )}
     </div>
   )
 }

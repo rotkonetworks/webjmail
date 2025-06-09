@@ -14,10 +14,10 @@ export class JMAPClient {
 
     // For Stalwart, we might need to handle both Basic and Bearer auth
     const token = 'Basic ' + btoa(username + ':' + password)
-    
+
     try {
       console.log('[JMAP] Sending authentication request...')
-      
+
       const response = await fetch(serverUrl, {
         method: 'GET',
         headers: {
@@ -25,13 +25,13 @@ export class JMAPClient {
           'Accept': 'application/json',
         },
       })
-      
+
       console.log('[JMAP] Authentication response received:', {
         status: response.status,
         statusText: response.statusText,
         headers: Object.fromEntries(response.headers.entries())
       })
-      
+
       if (!response.ok) {
         const errorText = await response.text()
         console.error('[JMAP] Authentication failed:', {
@@ -39,7 +39,7 @@ export class JMAPClient {
           statusText: response.statusText,
           body: errorText
         })
-        
+
         if (response.status === 401) {
           throw new Error('Invalid username or password')
         }
@@ -51,26 +51,26 @@ export class JMAPClient {
         }
         throw new Error(`Authentication failed: ${response.statusText} (${response.status})`)
       }
-      
+
       const responseText = await response.text()
       console.log('[JMAP] Raw response:', responseText.substring(0, 500) + '...')
-      
+
       try {
         this.session = JSON.parse(responseText)
       } catch (parseError) {
         console.error('[JMAP] Failed to parse response as JSON:', parseError)
         throw new Error('Invalid response from server. Expected JSON but got: ' + responseText.substring(0, 100))
       }
-      
+
       this.accessToken = token
       this.baseUrl = serverUrl.replace('/.well-known/jmap', '')
-      
+
       // Validate session structure
       if (!this.session.apiUrl) {
         console.error('[JMAP] Invalid session structure:', this.session)
         throw new Error('Invalid session: missing apiUrl')
       }
-      
+
       // Log session capabilities for debugging
       console.log('[JMAP] Session established successfully:', {
         username: this.session.username,
@@ -81,11 +81,11 @@ export class JMAPClient {
         downloadUrl: this.session.downloadUrl,
         uploadUrl: this.session.uploadUrl
       })
-      
+
       return this.session
     } catch (error) {
       console.error('[JMAP] Authentication error:', error)
-      
+
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
         console.error('[JMAP] Network error - possible causes:', {
           cors: 'CORS policy blocking request',
@@ -103,7 +103,7 @@ export class JMAPClient {
     if (import.meta.env.DEV) {
       try {
         const urlObj = new URL(url)
-        
+
         // Check if this is a mail.rotko.net URL
         if (urlObj.hostname === 'mail.rotko.net') {
           // Return just the pathname (e.g., /jmap/)
@@ -159,7 +159,7 @@ export class JMAPClient {
           status: response.status,
           body: errorText
         })
-        
+
         if (response.status === 401) {
           // Session expired
           this.session = null
@@ -169,12 +169,12 @@ export class JMAPClient {
       }
 
       const data: JMAPResponse = await response.json()
-      
+
       console.log('[JMAP] Response data:', {
         methodResponses: data.methodResponses.map(([method, , id]) => ({ method, id })),
         sessionState: data.sessionState
       })
-      
+
       // Check for method-level errors
       for (const [method, result, id] of data.methodResponses) {
         if (method === 'error') {
@@ -182,7 +182,7 @@ export class JMAPClient {
           throw new Error(result.description || 'JMAP method error')
         }
       }
-      
+
       return data.methodResponses
     } catch (error) {
       console.error('[JMAP] Request error:', error)
@@ -192,30 +192,179 @@ export class JMAPClient {
 
   async getMailboxes(accountId: string): Promise<Mailbox[]> {
     console.log('[JMAP] Fetching mailboxes for account:', accountId)
-    
+
     const responses = await this.request([
       ['Mailbox/get', { 
         accountId,
         properties: null // Get all properties
       }, '0'],
     ])
-    
+
     const [, result] = responses[0]
     console.log('[JMAP] Mailboxes fetched:', {
       count: result.list?.length || 0,
       state: result.state
     })
-    
+
     return result.list || []
+  }
+
+  async moveEmail(
+    accountId: string,
+    emailId: string,
+    fromMailboxId: string,
+    toMailboxId: string
+  ) {
+    console.log('[JMAP] Moving email:', { emailId, from: fromMailboxId, to: toMailboxId })
+
+    const update = {
+      [emailId]: {
+        mailboxIds: {
+          [fromMailboxId]: false,
+          [toMailboxId]: true,
+        }
+      }
+    }
+
+    return this.setEmail(accountId, update)
+  }
+
+  async sendEmail(
+    accountId: string,
+    email: any,
+    submission: any
+  ) {
+    console.log('[JMAP] Sending email:', { accountId, email })
+
+    const responses = await this.request([
+      ['Email/set', { accountId, create: { draft: email } }, '0'],
+      ['EmailSubmission/set', { 
+        accountId, 
+        create: { 
+          submission: {
+            ...submission,
+            emailId: '#draft',
+          }
+        }
+      }, '1'],
+    ])
+
+    return responses
+  }
+
+  async setEmail(
+    accountId: string,
+    update: Record<string, Partial<Email>>
+  ) {
+    console.log('[JMAP] Updating emails:', { accountId, updates: Object.keys(update) })
+
+    const responses = await this.request([
+      ['Email/set', { accountId, update }, '0'],
+    ])
+
+    const result = responses[0][1]
+    console.log('[JMAP] Email update result:', {
+      updated: Object.keys(result.updated || {}),
+      notUpdated: Object.keys(result.notUpdated || {})
+    })
+
+    return result
+  }
+
+  getSession() {
+    return this.session
+  }
+
+  getBlobUrl(accountId: string, blobId: string, type: string, name: string) {
+    if (!this.session) throw new Error('Not authenticated')
+
+    // Build the download URL
+    let url = this.session.downloadUrl
+    .replace('{accountId}', encodeURIComponent(accountId))
+    .replace('{blobId}', encodeURIComponent(blobId))
+    .replace('{type}', encodeURIComponent(type))
+    .replace('{name}', encodeURIComponent(name))
+
+    // Use proxy in development
+    url = this.getProxiedUrl(url)
+
+    // Add auth token as query parameter for Stalwart
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}access_token=${encodeURIComponent(this.accessToken)}`
+  }
+
+  // EventSource for push notifications (Stalwart supports this)
+  createEventSource(types: string[] = ['*']): EventSource {
+    if (!this.session) throw new Error('Not authenticated')
+
+    let url = this.session.eventSourceUrl
+    .replace('{types}', types.join(','))
+    .replace('{closeafter}', 'no')
+    .replace('{ping}', '30')
+
+    // Use proxy in development
+    url = this.getProxiedUrl(url)
+
+    // Note: EventSource doesn't support custom headers, so auth must be in URL
+    const separator = url.includes('?') ? '&' : '?'
+    const eventSourceUrl = `${url}${separator}access_token=${encodeURIComponent(this.accessToken)}`
+
+    console.log('[JMAP] Creating EventSource:', eventSourceUrl)
+
+    return new EventSource(eventSourceUrl)
+  }
+
+  async searchEmails(
+    accountId: string,
+    query: string,
+    limit = 30
+  ): Promise<Email[]> {
+    console.log('[JMAP] Searching emails:', { accountId, query, limit })
+
+    const responses = await this.request([
+      ['Email/query', { 
+        accountId,
+        filter: {
+          operator: 'OR',
+          conditions: [
+            { subject: query },
+            { from: query },
+            { to: query },
+            { body: query },
+            { text: query }
+          ]
+        },
+        sort: [{ property: 'receivedAt', isAscending: false }],
+        limit,
+      }, '0'],
+      ['Email/get', {
+        accountId,
+        '#ids': {
+          resultOf: '0',
+          name: 'Email/query',
+          path: '/ids',
+        },
+        properties: [
+          'id', 'blobId', 'threadId', 'mailboxIds', 'keywords',
+          'size', 'receivedAt', 'subject', 'from', 'to', 'preview',
+          'hasAttachment'
+        ],
+      }, '1'],
+    ])
+
+    const [, getResult] = responses[1]
+    return getResult.list || []
   }
 
   async getEmails(
     accountId: string,
     filter: any = {},
-    properties?: string[]
-  ): Promise<Email[]> {
-    console.log('[JMAP] Fetching emails:', { accountId, filter })
-    
+    properties?: string[],
+    position = 0,
+    limit = 50
+  ): Promise<{ emails: Email[]; total: number; position: number }> {
+    console.log('[JMAP] Fetching emails:', { accountId, filter, position, limit })
+
     // Default properties if not specified
     if (!properties) {
       properties = [
@@ -231,7 +380,9 @@ export class JMAPClient {
         accountId, 
         filter,
         sort: [{ property: 'receivedAt', isAscending: false }],
-        limit: 50, // Limit for initial load
+        position,
+        limit,
+        calculateTotal: true,
       }, '0'],
       ['Email/get', {
         accountId,
@@ -247,122 +398,51 @@ export class JMAPClient {
         maxBodyValueBytes: 256 * 1024, // 256KB max per body part
       }, '1'],
     ])
-    
+
     const [, queryResult] = responses[0]
     const [, getResult] = responses[1]
-    
+
     console.log('[JMAP] Emails fetched:', {
       queryCount: queryResult.ids?.length || 0,
       fetchedCount: getResult.list?.length || 0,
+      total: queryResult.total,
+      position: queryResult.position,
       state: getResult.state
     })
-    
-    return getResult.list || []
-  }
 
-  async setEmail(
-    accountId: string,
-    update: Record<string, Partial<Email>>
-  ) {
-    console.log('[JMAP] Updating emails:', { accountId, updates: Object.keys(update) })
-    
-    const responses = await this.request([
-      ['Email/set', { accountId, update }, '0'],
-    ])
-    
-    const result = responses[0][1]
-    console.log('[JMAP] Email update result:', {
-      updated: Object.keys(result.updated || {}),
-      notUpdated: Object.keys(result.notUpdated || {})
-    })
-    
-    return result
-  }
-
-  async moveEmail(
-    accountId: string,
-    emailId: string,
-    fromMailboxId: string,
-    toMailboxId: string
-  ) {
-    console.log('[JMAP] Moving email:', { emailId, from: fromMailboxId, to: toMailboxId })
-    
-    const update = {
-      [emailId]: {
-        mailboxIds: {
-          [fromMailboxId]: false,
-          [toMailboxId]: true,
-        }
-      }
+    return {
+      emails: getResult.list || [],
+      total: queryResult.total || 0,
+      position: queryResult.position || 0
     }
-    
-    return this.setEmail(accountId, update)
   }
 
-  async sendEmail(
-    accountId: string,
-    email: any,
-    submission: any
-  ) {
-    console.log('[JMAP] Sending email:', { accountId, email })
-    
+  async getEmailThread(accountId: string, threadId: string): Promise<Email[]> {
+    console.log('[JMAP] Fetching thread:', { accountId, threadId })
+
     const responses = await this.request([
-      ['Email/set', { accountId, create: { draft: email } }, '0'],
-      ['EmailSubmission/set', { 
+      ['Email/query', { 
         accountId, 
-        create: { 
-          submission: {
-            ...submission,
-            emailId: '#draft',
-          }
-        }
+        filter: { inThread: threadId },
+        sort: [{ property: 'receivedAt', isAscending: true }], // Oldest first for threads
+      }, '0'],
+      ['Email/get', {
+        accountId,
+        '#ids': {
+          resultOf: '0',
+          name: 'Email/query',
+          path: '/ids',
+        },
+        properties: null, // Get all properties for thread
+        fetchTextBodyValues: true,
+        fetchHTMLBodyValues: true,
+        fetchAllBodyValues: false,
+        maxBodyValueBytes: 512 * 1024, // 512KB for thread emails
       }, '1'],
     ])
-    
-    return responses
-  }
 
-  getSession() {
-    return this.session
-  }
-
-  getBlobUrl(accountId: string, blobId: string, type: string, name: string) {
-    if (!this.session) throw new Error('Not authenticated')
-    
-    // Build the download URL
-    let url = this.session.downloadUrl
-      .replace('{accountId}', encodeURIComponent(accountId))
-      .replace('{blobId}', encodeURIComponent(blobId))
-      .replace('{type}', encodeURIComponent(type))
-      .replace('{name}', encodeURIComponent(name))
-    
-    // Use proxy in development
-    url = this.getProxiedUrl(url)
-    
-    // Add auth token as query parameter for Stalwart
-    const separator = url.includes('?') ? '&' : '?'
-    return `${url}${separator}access_token=${encodeURIComponent(this.accessToken)}`
-  }
-
-  // EventSource for push notifications (Stalwart supports this)
-  createEventSource(types: string[] = ['*']): EventSource {
-    if (!this.session) throw new Error('Not authenticated')
-    
-    let url = this.session.eventSourceUrl
-      .replace('{types}', types.join(','))
-      .replace('{closeafter}', 'no')
-      .replace('{ping}', '30')
-    
-    // Use proxy in development
-    url = this.getProxiedUrl(url)
-    
-    // Note: EventSource doesn't support custom headers, so auth must be in URL
-    const separator = url.includes('?') ? '&' : '?'
-    const eventSourceUrl = `${url}${separator}access_token=${encodeURIComponent(this.accessToken)}`
-    
-    console.log('[JMAP] Creating EventSource:', eventSourceUrl)
-    
-    return new EventSource(eventSourceUrl)
+    const [, getResult] = responses[1]
+    return getResult.list || []
   }
 }
 

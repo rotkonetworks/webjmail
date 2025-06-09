@@ -10,6 +10,7 @@ interface MailState {
   
   setMailboxes: (mailboxes: Mailbox[]) => void
   setEmails: (emails: Email[]) => void
+  addEmails: (emails: Email[]) => void
   selectMailbox: (mailboxId: string | null) => void
   selectEmail: (emailId: string | null) => void
   updateEmail: (emailId: string, updates: Partial<Email>) => void
@@ -33,6 +34,14 @@ export const useMailStore = create<MailState>()(
       }),
 
     setEmails: (emails) =>
+      set((state) => {
+        state.emails = {}
+        emails.forEach((email) => {
+          state.emails[email.id] = email
+        })
+      }),
+
+    addEmails: (emails) =>
       set((state) => {
         emails.forEach((email) => {
           state.emails[email.id] = email

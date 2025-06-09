@@ -3,73 +3,61 @@ import { useAuthStore } from '../stores/authStore'
 import { config, serverPresets } from '../config'
 
 export function Login() {
-  // Use the default server from config
   const [server, setServer] = useState(config.defaultServer)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [localError, setLocalError] = useState('')
-  
+
   const { login, isLoading, error: authError, clearError } = useAuthStore()
-  
-  // Show auth store errors
+
   useEffect(() => {
     if (authError) {
       setLocalError(authError)
-      // Clear the error from the store after showing it
       const timer = setTimeout(() => clearError(), 5000)
       return () => clearTimeout(timer)
     }
   }, [authError, clearError])
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLocalError('')
-    
-    // Basic validation
+
     if (!server || !username || !password) {
       setLocalError('Please fill in all fields')
       return
     }
-    
-    console.log('[Login] Submitting login form...', { 
-      server, 
-      username,
-      // Log first few chars of password for debugging
-      passwordLength: password.length,
-      passwordPrefix: password.substring(0, 3) + '***'
-    })
-    
+
     try {
       await login(server, username, password)
-      console.log('[Login] Login successful')
     } catch (err) {
-      console.error('[Login] Login error:', err)
-      // Error is already set in the store, just log it here
+      // Error handled by store
     }
   }
-  
+
   const displayError = localError || authError
-  
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[var(--bg-primary)] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="i-lucide:mail text-6xl text-primary" />
+          <div className="w-16 h-16 bg-[var(--primary-color)] rounded-2xl flex items-center justify-center">
+            <div className="i-lucide:mail text-white text-3xl" />
+          </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Rotko Mail
+        <h2 className="mt-6 text-center text-3xl font-bold text-[var(--text-primary)]">
+          {config.appName}
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Sign in to your Stalwart mail account
+        <p className="mt-2 text-center text-sm text-[var(--text-secondary)]">
+          Sign in to your email account
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="bg-[var(--bg-secondary)] py-8 px-4 shadow-xl rounded-lg sm:px-10 border border-[var(--border-color)]">
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="server" className="block text-sm font-medium text-gray-700">
-                JMAP Server URL
+              <label htmlFor="server" className="block text-sm font-medium text-[var(--text-primary)]">
+                JMAP Server
               </label>
               <div className="mt-1">
                 <input
@@ -80,17 +68,17 @@ export function Login() {
                   disabled={isLoading}
                   value={server}
                   onChange={(e) => setServer(e.target.value)}
-                  className="input w-full disabled:opacity-50 disabled:bg-gray-100"
-                  placeholder="/.well-known/jmap or https://mail.rotko.net/.well-known/jmap"
+                  className="search-input w-full disabled:opacity-50"
+                  placeholder="https://mail.example.com/.well-known/jmap"
                 />
               </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Default: Rotko Stalwart Mail Server (no port needed)
+              <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+                Using proxy in development mode
               </p>
             </div>
 
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="username" className="block text-sm font-medium text-[var(--text-primary)]">
                 Username
               </label>
               <div className="mt-1">
@@ -103,18 +91,18 @@ export function Login() {
                   disabled={isLoading}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="input w-full disabled:opacity-50 disabled:bg-gray-100"
-                  placeholder="username (without @domain)"
+                  className="search-input w-full disabled:opacity-50"
+                  placeholder="username"
                   autoFocus
                 />
               </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Enter just the username part (e.g., "peering" not "peering@rotko.net")
+              <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+                Username only, not full email address
               </p>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="block text-sm font-medium text-[var(--text-primary)]">
                 Password
               </label>
               <div className="mt-1">
@@ -127,22 +115,22 @@ export function Login() {
                   disabled={isLoading}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="input w-full disabled:opacity-50 disabled:bg-gray-100"
+                  className="search-input w-full disabled:opacity-50"
                 />
               </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Use an app password from Stalwart if 2FA is enabled
+              <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+                Use app password if 2FA enabled
               </p>
             </div>
 
             {displayError && (
-              <div className="rounded-md bg-red-50 p-4">
+              <div className="rounded-md bg-red-500/10 border border-red-500/20 p-4">
                 <div className="flex">
                   <div className="flex-shrink-0">
-                    <div className="i-lucide:x-circle text-red-400" />
+                    <div className="i-lucide:alert-circle text-red-500" />
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm text-red-800 whitespace-pre-wrap">{displayError}</p>
+                    <p className="text-sm text-red-400 whitespace-pre-wrap">{displayError}</p>
                   </div>
                 </div>
               </div>
@@ -152,12 +140,12 @@ export function Login() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="btn w-full flex justify-center items-center"
+                className="btn-primary w-full flex justify-center items-center py-3 rounded-lg font-medium"
               >
                 {isLoading ? (
                   <>
                     <div className="i-eos-icons:loading animate-spin mr-2" />
-                    Signing in...
+                    Authenticating...
                   </>
                 ) : (
                   'Sign in'
@@ -166,28 +154,17 @@ export function Login() {
             </div>
           </form>
 
-          {/* Debug info in development */}
-          {import.meta.env.DEV && (
-            <div className="mt-4 p-3 bg-gray-100 rounded text-xs text-gray-600">
-              <p className="font-semibold mb-1">Debug Info:</p>
-              <p>• Check browser console (F12) for detailed logs</p>
-              <p>• Network tab shows actual HTTP requests</p>
-              <p>• Common issues: CORS, SSL certs, wrong URL format</p>
-              <p>• Username format: just the username, not full email</p>
-            </div>
-          )}
-
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
+                <div className="w-full border-t border-[var(--border-color)]" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Server Presets</span>
+                <span className="px-2 bg-[var(--bg-secondary)] text-[var(--text-tertiary)]">Quick select</span>
               </div>
             </div>
 
-            <div className="mt-6 grid gap-3">
+            <div className="mt-6 space-y-2">
               {serverPresets.map((preset) => (
                 <button
                   key={preset.url}
@@ -199,31 +176,26 @@ export function Login() {
                     setPassword('')
                     setLocalError('')
                   }}
-                  className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center py-3 px-4 border border-[var(--border-color)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <div className="i-lucide:server mr-2" />
+                  <div className="i-lucide:server text-[var(--text-secondary)] mr-3" />
                   <div className="text-left flex-1">
-                    <div>{preset.name}</div>
-                    <div className="text-xs text-gray-500">{preset.description}</div>
+                    <div className="text-sm font-medium text-[var(--text-primary)]">{preset.name}</div>
+                    <div className="text-xs text-[var(--text-tertiary)]">{preset.description}</div>
                   </div>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="mt-6">
-            <p className="text-center text-xs text-gray-500">
-              Powered by{' '}
-              <a
-                href="https://stalw.art/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:text-primary-dark"
-              >
-                Stalwart Mail Server
-              </a>
-            </p>
-          </div>
+          {import.meta.env.DEV && (
+            <div className="mt-6 p-3 bg-[var(--bg-tertiary)] rounded-lg text-xs text-[var(--text-tertiary)] border border-[var(--border-color)]">
+              <p className="font-semibold mb-1 text-[var(--text-secondary)]">Dev Mode:</p>
+              <p>• Console: F12 for JMAP logs</p>
+              <p>• Network: Monitor requests</p>
+              <p>• Proxy: CORS bypassed</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

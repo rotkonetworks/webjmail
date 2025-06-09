@@ -17,24 +17,24 @@
   --bg-secondary: #1e1f1c;
   --bg-tertiary: #383a3e;
   --text-primary: #f8f8f2;
-  --text-secondary: #a6a6a0;
-  --text-tertiary: #75715e;
+  --text-secondary: #d3d3d3;
+  --text-tertiary: #a6a6a0;
   --border-color: #414339;
   
-  /* Monokai accent colors */
-  --accent-pink: #f92672;
-  --accent-green: #a6e22e;
-  --accent-yellow: #e6db74;
-  --accent-orange: #fd971f;
-  --accent-purple: #ae81ff;
-  --accent-cyan: #66d9ef;
-  --accent-blue: #66d9ef;
+  /* Monokai accent colors - using provided palette */
+  --accent-pink: #ff6188;
+  --accent-orange: #fc9867;
+  --accent-yellow: #ffd866;
+  --accent-green: #a9dc76;
+  --accent-cyan: #78dce8;
+  --accent-blue: #78dce8;
   
   /* UI specific */
-  --primary-color: #f92672;
-  --primary-hover: #ff0066;
-  --compose-btn: #f92672;
-  --unread-dot: #66d9ef;
+  --primary-color: #ff6188;
+  --primary-hover: #ff4d7d;
+  --compose-btn: #ff6188;
+  --unread-dot: #78dce8;
+  --proton-purple: #ff6188;
 }
 
 /* Polkadot Light Theme */
@@ -48,20 +48,20 @@
   --text-tertiary: #999999;
   --border-color: #dce2e9;
   
-  /* Polkadot accent colors */
-  --accent-pink: #e6007a;
-  --accent-green: #56f39a;
-  --accent-yellow: #d3ff33;
-  --accent-orange: #ff8c00;
-  --accent-purple: #552bbf;
-  --accent-cyan: #00b2ff;
-  --accent-blue: #0077ff;
+  /* Monokai accent colors - adapted for light theme */
+  --accent-pink: #d1477a;
+  --accent-orange: #e6825a;
+  --accent-yellow: #d4c441;
+  --accent-green: #85b862;
+  --accent-cyan: #5cb3c4;
+  --accent-blue: #5cb3c4;
   
   /* UI specific */
-  --primary-color: #e6007a;
-  --primary-hover: #cc006c;
-  --compose-btn: #e6007a;
-  --unread-dot: #0077ff;
+  --primary-color: #d1477a;
+  --primary-hover: #b83d68;
+  --compose-btn: #d1477a;
+  --unread-dot: #5cb3c4;
+  --proton-purple: #d1477a;
 }
 
 /* Auto theme detection */
@@ -75,17 +75,17 @@
     --text-secondary: #5e5e5e;
     --text-tertiary: #999999;
     --border-color: #dce2e9;
-    --accent-pink: #e6007a;
-    --accent-green: #56f39a;
-    --accent-yellow: #d3ff33;
-    --accent-orange: #ff8c00;
-    --accent-purple: #552bbf;
-    --accent-cyan: #00b2ff;
-    --accent-blue: #0077ff;
-    --primary-color: #e6007a;
-    --primary-hover: #cc006c;
-    --compose-btn: #e6007a;
-    --unread-dot: #0077ff;
+    --accent-pink: #d1477a;
+    --accent-orange: #e6825a;
+    --accent-yellow: #d4c441;
+    --accent-green: #85b862;
+    --accent-cyan: #5cb3c4;
+    --accent-blue: #5cb3c4;
+    --primary-color: #d1477a;
+    --primary-hover: #b83d68;
+    --compose-btn: #d1477a;
+    --unread-dot: #5cb3c4;
+    --proton-purple: #d1477a;
   }
 }
 
@@ -96,20 +96,20 @@
     --bg-secondary: #1e1f1c;
     --bg-tertiary: #383a3e;
     --text-primary: #f8f8f2;
-    --text-secondary: #a6a6a0;
-    --text-tertiary: #75715e;
+    --text-secondary: #d3d3d3;
+    --text-tertiary: #a6a6a0;
     --border-color: #414339;
-    --accent-pink: #f92672;
-    --accent-green: #a6e22e;
-    --accent-yellow: #e6db74;
-    --accent-orange: #fd971f;
-    --accent-purple: #ae81ff;
-    --accent-cyan: #66d9ef;
-    --accent-blue: #66d9ef;
-    --primary-color: #f92672;
-    --primary-hover: #ff0066;
-    --compose-btn: #f92672;
-    --unread-dot: #66d9ef;
+    --accent-pink: #ff6188;
+    --accent-orange: #fc9867;
+    --accent-yellow: #ffd866;
+    --accent-green: #a9dc76;
+    --accent-cyan: #78dce8;
+    --accent-blue: #78dce8;
+    --primary-color: #ff6188;
+    --primary-hover: #ff4d7d;
+    --compose-btn: #ff6188;
+    --unread-dot: #78dce8;
+    --proton-purple: #ff6188;
   }
 }
 
@@ -459,4 +459,33 @@ input[type="radio"]:checked::after {
 .prose th {
   background-color: var(--bg-tertiary);
   font-weight: 600;
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Thread timeline scrollbar */
+.timeline-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.timeline-scrollbar::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+.timeline-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 5px;
+}
+
+.timeline-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
 }
