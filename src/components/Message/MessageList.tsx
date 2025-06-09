@@ -336,21 +336,28 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       })}
       
       {/* Load more */}
-      {hasMore && !showServerSearch && (
+      {!showServerSearch && (
         <div ref={loadMoreRef} className="p-4 text-center">
-          {isFetchingNextPage ? (
+          {hasMore ? (
+            isFetchingNextPage ? (
+              <div className="flex items-center justify-center gap-2 text-[var(--text-tertiary)]">
+                <div className="animate-spin i-eos-icons:loading" />
+                <span className="text-sm">Loading more messages...</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => fetchNextPage()}
+                className="text-sm text-[var(--primary-color)] hover:underline"
+              >
+                Load more
+              </button>
+            )
+          ) : filteredEmails.length > 0 && total > 0 && filteredEmails.length >= total ? (
             <div className="flex items-center justify-center gap-2 text-[var(--text-tertiary)]">
-              <div className="animate-spin i-eos-icons:loading" />
-              <span className="text-sm">Loading more messages...</span>
+              <div className="i-lucide:check-circle text-sm" />
+              <span className="text-sm">All messages loaded ({total} total)</span>
             </div>
-          ) : (
-            <button
-              onClick={() => fetchNextPage()}
-              className="text-sm text-[var(--primary-color)] hover:underline"
-            >
-              Load more
-            </button>
-          )}
+          ) : null}
         </div>
       )}
       
