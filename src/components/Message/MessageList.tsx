@@ -3,6 +3,7 @@ import { useEmails, useEmailSearch } from '../../hooks/useJMAP'
 import { useOfflineEmails, useOfflineSearch } from '../../hooks/useIndexedDB'
 import { useMailStore } from '../../stores/mailStore'
 import { format, isToday, isYesterday } from 'date-fns'
+import DOMPurify from 'dompurify'
 
 interface MessageListProps {
   searchQuery: string
@@ -57,10 +58,11 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
   const listRef = useRef<HTMLDivElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
   
-  // Intersection observer for infinite scroll
+  // Intersection observer for infinite scroll with improved cleanup
   useEffect(() => {
     if (!loadMoreRef.current || !hasMore || showServerSearch) return
     
+    const element = loadMoreRef.current
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !isFetchingNextPage) {
@@ -70,8 +72,19 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       { threshold: 0.1 }
     )
     
-    observer.observe(loadMoreRef.current)
-    return () => observer.disconnect()
+    try {
+      observer.observe(element)
+      return () => {
+        try {
+          observer.disconnect()
+        } catch (error) {
+          console.warn('Observer cleanup failed:', error)
+        }
+      }
+    } catch (error) {
+      console.warn('Observer setup failed:', error)
+      observer.disconnect()
+    }
   }, [hasMore, isFetchingNextPage, fetchNextPage, showServerSearch])
   
   // Handle Enter key
@@ -140,14 +153,41 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     return format(date, 'MMM d')
   }
   
+  // Security: Escape regex special characters to prevent ReDoS attacks
+  const escapeRegex = (str: string): string => {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+
+  // Security: Sanitize and validate input to prevent XSS and injection attacks
+  const sanitizeText = (text: string): string => {
+    if (!text || typeof text !== 'string') return ''
+    // Limit length to prevent DoS
+    if (text.length > 10000) text = text.substring(0, 10000)
+    return DOMPurify.sanitize(text, { ALLOWED_TAGS: [] })
+  }
+
   const highlightText = (text: string, query: string) => {
-    if (!query || !text) return text
-    const parts = text.split(new RegExp(`(${query})`, 'gi'))
-    return parts.map((part, i) => 
-      part.toLowerCase() === query.toLowerCase() 
-        ? <span key={i} className="search-highlight">{part}</span>
-        : part
-    )
+    if (!query || !text) return sanitizeText(text)
+    
+    // Security: Validate and limit query length
+    if (query.length > 100) return sanitizeText(text)
+    
+    // Security: Escape regex special characters to prevent ReDoS
+    const escapedQuery = escapeRegex(query)
+    const sanitizedText = sanitizeText(text)
+    
+    try {
+      const parts = sanitizedText.split(new RegExp(`(${escapedQuery})`, 'gi'))
+      return parts.map((part, i) => 
+        part.toLowerCase() === query.toLowerCase() 
+          ? <span key={i} className="search-highlight">{part}</span>
+          : part
+      )
+    } catch (error) {
+      // Fallback if regex fails
+      console.warn('Regex highlighting failed:', error)
+      return sanitizedText
+    }
   }
   
   if (!selectedMailboxId) {
@@ -238,7 +278,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
         const isSelected = email.id === selectedEmailId
         const isUnread = !email.keywords.$seen
         const sender = email.from?.[0]
-        const senderName = sender?.name || sender?.email?.split('@')[0] || 'Unknown'
+        const senderName = sanitizeText(sender?.name || sender?.email?.split('@')[0] || 'Unknown')
         
         return (
           <div
@@ -269,7 +309,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                     ${isUnread ? 'font-semibold' : 'font-medium'}
                     ${isSelected ? 'text-white' : 'text-[var(--text-primary)]'}
                   `}>
-                    {searchQuery ? highlightText(senderName, searchQuery) : senderName}
+                    {searchQuery ? highlightText(senderName, searchQuery) : sanitizeText(senderName)}
                   </span>
                   <span className={`
                     ${viewMode === 'row' ? 'text-sm' : 'text-xs'} 
@@ -286,7 +326,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                   ${isUnread ? 'font-medium' : ''}
                   ${isSelected ? 'text-white' : 'text-[var(--text-primary)]'}
                 `}>
-                  {searchQuery ? highlightText(email.subject || '(no subject)', searchQuery) : (email.subject || '(no subject)')}
+                  {searchQuery ? highlightText(email.subject || '(no subject)', searchQuery) : sanitizeText(email.subject || '(no subject)')}
                 </div>
                 
                 {/* Preview */}
@@ -295,7 +335,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                   ${viewMode === 'row' ? 'text-sm' : 'text-sm'}
                   ${isSelected ? 'text-white/70' : 'text-[var(--text-tertiary)]'}
                 `}>
-                  {searchQuery ? highlightText(email.preview, searchQuery) : email.preview}
+                  {searchQuery ? highlightText(email.preview || '', searchQuery) : sanitizeText(email.preview || '')}
                 </div>
                 
                 {/* Labels */}
@@ -336,21 +376,28 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       })}
       
       {/* Load more */}
-      {hasMore && !showServerSearch && (
+      {!showServerSearch && (
         <div ref={loadMoreRef} className="p-4 text-center">
-          {isFetchingNextPage ? (
+          {hasMore ? (
+            isFetchingNextPage ? (
+              <div className="flex items-center justify-center gap-2 text-[var(--text-tertiary)]">
+                <div className="animate-spin i-eos-icons:loading" />
+                <span className="text-sm">Loading more messages...</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => fetchNextPage()}
+                className="text-sm text-[var(--primary-color)] hover:underline"
+              >
+                Load more
+              </button>
+            )
+          ) : filteredEmails.length > 0 && total > 0 && filteredEmails.length >= total ? (
             <div className="flex items-center justify-center gap-2 text-[var(--text-tertiary)]">
-              <div className="animate-spin i-eos-icons:loading" />
-              <span className="text-sm">Loading more messages...</span>
+              <div className="i-lucide:check-circle text-sm" />
+              <span className="text-sm">All messages loaded ({total} total)</span>
             </div>
-          ) : (
-            <button
-              onClick={() => fetchNextPage()}
-              className="text-sm text-[var(--primary-color)] hover:underline"
-            >
-              Load more
-            </button>
-          )}
+          ) : null}
         </div>
       )}
       
