@@ -1,27 +1,37 @@
-name: Security Assistant
+name: Claude Assistant
 on:
- issue_comment:
-   types: [created]
- pull_request_review_comment:
-   types: [created]
- issues:
-   types: [opened, assigned]
- pull_request_review:
-   types: [submitted]
- pull_request:
-   types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
+  pull_request:
+    types: [opened, synchronize]
 jobs:
- claude-response:
-   runs-on: ubuntu-latest
-   permissions:
-    id-token: write
-    contents: write
-    issues: write
-    pull-requests: write
-   steps:
-     - uses: actions/checkout@v4
-       with:
-         fetch-depth: -1
-     - uses: anthropics/claude-code-action@beta
-       with:
-         anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+  claude-response:
+    # Whitelist: Only allow OWNER, MEMBER, and COLLABORATOR
+    if: |
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'),
+        github.event.comment.author_association) ||
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'),
+        github.event.issue.author_association) ||
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'),
+        github.event.pull_request.user.association) ||
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'),
+        github.event.review.author_association)
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: -1
+      - uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
