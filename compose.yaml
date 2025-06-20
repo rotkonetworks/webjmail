@@ -1,6 +1,6 @@
 services:
   webjmail:
-    image: rotkonetworks/webjmail:latest
+    image: rotko/webjmail:latest
     ports:
       - "8080:80"
     restart: unless-stopped
