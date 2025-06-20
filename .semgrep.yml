@@ -1,0 +1,10 @@
+rules:
+  - id: no-direct-indexeddb-access
+    pattern: db.emails.where($X)
+    message: Use sync manager for user-isolated queries
+    severity: ERROR
+    
+  - id: no-unsanitized-html
+    pattern: dangerouslySetInnerHTML={{__html: $HTML}}
+    message: Must use DOMPurify
+    severity: ERROR
