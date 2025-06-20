@@ -292,61 +292,109 @@ export function useSendEmail() {
       if (!accountId) throw new Error('No account ID')
       if (!session) throw new Error('No session')
 
+      console.log('[useSendEmail] Starting email send process...', {
+        accountId,
+        to: to.length,
+        cc: cc?.length || 0,
+        subject,
+        hasTextBody: !!textBody,
+        hasHtmlBody: !!htmlBody
+      })
+
       // Find drafts and sent mailboxes
       const draftsMailbox = Object.values(mailboxes).find(m => m.role === 'drafts')
       const sentMailbox = Object.values(mailboxes).find(m => m.role === 'sent')
 
-      const emailId = `draft-${Date.now()}`
+      console.log('[useSendEmail] Mailboxes found:', {
+        draftsMailbox: draftsMailbox?.id,
+        sentMailbox: sentMailbox?.id
+      })
+
+      const emailId = `email-${Date.now()}`
       
+      // Create a simplified email structure for better compatibility
+      const emailData: any = {
+        mailboxIds: {},
+        from: [{ 
+          name: session.accounts[accountId]?.name || null,
+          email: session.username 
+        }],
+        to,
+        subject: subject || '',
+        keywords: {
+          $draft: true,
+          $seen: true,
+        },
+      }
+
+      // Add CC and BCC if present
+      if (cc && cc.length > 0) {
+        emailData.cc = cc
+      }
+      if (bcc && bcc.length > 0) {
+        emailData.bcc = bcc
+      }
+
+      // Handle body content - prefer text body for simplicity
+      if (textBody) {
+        emailData.bodyStructure = {
+          type: 'text/plain',
+          partId: '1',
+        }
+        emailData.bodyValues = {
+          '1': { 
+            value: textBody,
+            isEncodingProblem: false,
+            isTruncated: false
+          }
+        }
+        emailData.textBody = [{ partId: '1' }]
+      } else if (htmlBody) {
+        emailData.bodyStructure = {
+          type: 'text/html', 
+          partId: '1',
+        }
+        emailData.bodyValues = {
+          '1': { 
+            value: htmlBody,
+            isEncodingProblem: false,
+            isTruncated: false
+          }
+        }
+        emailData.htmlBody = [{ partId: '1' }]
+      }
+
+      // Add reply headers if this is a reply
+      if (inReplyTo) {
+        emailData.inReplyTo = [inReplyTo]
+        emailData.references = [inReplyTo]
+      }
+
+      // Add attachments if present
+      if (attachments && attachments.length > 0) {
+        emailData.attachments = attachments
+      }
+
+      console.log('[useSendEmail] Email data prepared:', {
+        emailId,
+        from: emailData.from,
+        to: emailData.to,
+        bodyType: emailData.bodyStructure?.type
+      })
+
       const result = await jmapClient.request([
         // Create the email
         ['Email/set', {
           accountId,
           create: {
-            [emailId]: {
-              mailboxIds: draftsMailbox ? { [draftsMailbox.id]: true } : {},
-              from: [{ 
-                name: session.accounts[accountId]?.name || session.username,
-                email: session.username 
-              }],
-              to,
-              cc,
-              bcc,
-              subject,
-              keywords: {
-                $draft: true,
-                $seen: true,
-              },
-              bodyStructure: {
-                type: 'multipart/alternative',
-                subParts: [
-                  ...(textBody ? [{
-                    type: 'text/plain',
-                    partId: '1',
-                  }] : []),
-                  ...(htmlBody ? [{
-                    type: 'text/html',
-                    partId: '2',
-                  }] : []),
-                ],
-              },
-              bodyValues: {
-                ...(textBody ? { '1': { value: textBody } } : {}),
-                ...(htmlBody ? { '2': { value: htmlBody } } : {}),
-              },
-              ...(inReplyTo ? { 
-                inReplyTo: [inReplyTo],
-                references: [inReplyTo],
-              } : {}),
-              ...(attachments ? { attachments } : {}),
-            },
+            [emailId]: emailData
           },
         }, '0'],
-        // Send the email
+        // Submit the email for sending
         ['EmailSubmission/set', {
           accountId,
           create: {
-            submission1: {
+            [`submission-${Date.now()}`]: {
               emailId: `#${emailId}`,
               envelope: {
                 mailFrom: { email: session.username },
@@ -359,7 +407,7 @@ export function useSendEmail() {
             },
           },
           onSuccessUpdateEmail: {
-            [`#submission1`]: {
+            [`#${emailId}`]: {
               mailboxIds: sentMailbox ? { [sentMailbox.id]: true } : {},
               keywords: {
                 $draft: null,
@@ -370,13 +418,23 @@ export function useSendEmail() {
         }, '1'],
       ])
 
+      console.log('[useSendEmail] Email sent successfully:', {
+        responses: result.length,
+        emailCreated: result[0]?.[1]?.created ? 'yes' : 'no',
+        submissionCreated: result[1]?.[1]?.created ? 'yes' : 'no'
+      })
+
       return result
     },
     onSuccess: () => {
+      console.log('[useSendEmail] Email send mutation succeeded')
       // Refresh emails in current mailbox
       if (accountId) {
         queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
       }
+    },
+    onError: (error) => {
+      console.error('[useSendEmail] Email send mutation failed:', error)
     },
   })
 }
