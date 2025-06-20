@@ -292,23 +292,42 @@ export function useSendEmail() {
       if (!accountId) throw new Error('No account ID')
       if (!session) throw new Error('No session')
 
-      console.log('[useSendEmail] Starting email send process...', {
-        accountId,
-        to: to.length,
-        cc: cc?.length || 0,
-        subject,
-        hasTextBody: !!textBody,
-        hasHtmlBody: !!htmlBody
-      })
+      // Validate input parameters
+      if (!to || to.length === 0) {
+        throw new Error('At least one recipient is required')
+      }
+      
+      // Validate email addresses
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      const validateEmailAddresses = (addresses: Array<{ name?: string; email: string }>, fieldName: string) => {
+        for (const addr of addresses) {
+          if (!addr.email || !emailRegex.test(addr.email)) {
+            throw new Error(`Invalid email address in ${fieldName}: ${addr.email}`)
+          }
+        }
+      }
+      
+      validateEmailAddresses(to, 'to')
+      if (cc) validateEmailAddresses(cc, 'cc')
+      if (bcc) validateEmailAddresses(bcc, 'bcc')
+      
+      // Validate subject length
+      if (subject && subject.length > 998) {
+        throw new Error('Subject line too long (max 998 characters)')
+      }
+      
+      // Validate body content size (prevent DoS)
+      const maxBodySize = 1024 * 1024 * 5 // 5MB limit
+      if (textBody && textBody.length > maxBodySize) {
+        throw new Error('Text body too large')
+      }
+      if (htmlBody && htmlBody.length > maxBodySize) {
+        throw new Error('HTML body too large')
+      }
 
       // Find drafts and sent mailboxes
       const draftsMailbox = Object.values(mailboxes).find(m => m.role === 'drafts')
       const sentMailbox = Object.values(mailboxes).find(m => m.role === 'sent')
-
-      console.log('[useSendEmail] Mailboxes found:', {
-        draftsMailbox: draftsMailbox?.id,
-        sentMailbox: sentMailbox?.id
-      })
 
       const emailId = `email-${Date.now()}`
       
@@ -375,12 +394,6 @@ export function useSendEmail() {
         emailData.attachments = attachments
       }
 
-      console.log('[useSendEmail] Email data prepared:', {
-        emailId,
-        from: emailData.from,
-        to: emailData.to,
-        bodyType: emailData.bodyStructure?.type
-      })
 
       const result = await jmapClient.request([
         // Create the email
@@ -418,23 +431,18 @@ export function useSendEmail() {
         }, '1'],
       ])
 
-      console.log('[useSendEmail] Email sent successfully:', {
-        responses: result.length,
-        emailCreated: result[0]?.[1]?.created ? 'yes' : 'no',
-        submissionCreated: result[1]?.[1]?.created ? 'yes' : 'no'
-      })
 
       return result
     },
     onSuccess: () => {
-      console.log('[useSendEmail] Email send mutation succeeded')
       // Refresh emails in current mailbox
       if (accountId) {
         queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
       }
     },
     onError: (error) => {
-      console.error('[useSendEmail] Email send mutation failed:', error)
+      // Log error without exposing sensitive data
+      console.error('[useSendEmail] Email send failed:', error.message || 'Unknown error')
     },
   })
 }

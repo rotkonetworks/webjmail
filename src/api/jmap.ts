@@ -6,17 +6,11 @@ export class JMAPClient {
   private baseUrl: string = ''
 
   async authenticate(serverUrl: string, username: string, password: string) {
-    console.log('[JMAP] Starting authentication...', {
-      serverUrl,
-      username,
-      timestamp: new Date().toISOString()
-    })
 
     // For Stalwart, we might need to handle both Basic and Bearer auth
     const token = 'Basic ' + btoa(username + ':' + password)
 
     try {
-      console.log('[JMAP] Sending authentication request...')
 
       const response = await fetch(serverUrl, {
         method: 'GET',
@@ -26,19 +20,9 @@ export class JMAPClient {
         },
       })
 
-      console.log('[JMAP] Authentication response received:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries())
-      })
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('[JMAP] Authentication failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorText
-        })
 
         if (response.status === 401) {
           throw new Error('Invalid username or password')
@@ -53,13 +37,11 @@ export class JMAPClient {
       }
 
       const responseText = await response.text()
-      console.log('[JMAP] Raw response:', responseText.substring(0, 500) + '...')
 
       try {
         this.session = JSON.parse(responseText)
       } catch (parseError) {
-        console.error('[JMAP] Failed to parse response as JSON:', parseError)
-        throw new Error('Invalid response from server. Expected JSON but got: ' + responseText.substring(0, 100))
+        throw new Error('Invalid response from server. Expected JSON.')
       }
 
       this.accessToken = token
@@ -67,31 +49,12 @@ export class JMAPClient {
 
       // Validate session structure
       if (!this.session.apiUrl) {
-        console.error('[JMAP] Invalid session structure:', this.session)
         throw new Error('Invalid session: missing apiUrl')
       }
 
-      // Log session capabilities for debugging
-      console.log('[JMAP] Session established successfully:', {
-        username: this.session.username,
-        accounts: Object.keys(this.session.accounts || {}),
-        primaryAccounts: this.session.primaryAccounts,
-        capabilities: Object.keys(this.session.capabilities || {}),
-        apiUrl: this.session.apiUrl,
-        downloadUrl: this.session.downloadUrl,
-        uploadUrl: this.session.uploadUrl
-      })
-
       return this.session
     } catch (error) {
-      console.error('[JMAP] Authentication error:', error)
-
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        console.error('[JMAP] Network error - possible causes:', {
-          cors: 'CORS policy blocking request',
-          network: 'Server unreachable',
-          https: 'SSL/TLS certificate issues'
-        })
         throw new Error('Cannot connect to server. Please check:\n- The server URL is correct\n- The server is running\n- CORS is properly configured\n- SSL certificates are valid')
       }
       throw error
@@ -110,7 +73,7 @@ export class JMAPClient {
           return urlObj.pathname
         }
       } catch (e) {
-        console.error('[JMAP] Failed to parse URL:', url, e)
+        // URL parsing error - continue with original URL
       }
     }
     return url
@@ -118,7 +81,6 @@ export class JMAPClient {
 
   async request(methodCalls: Array<[string, any, string]>) {
     if (!this.session) {
-      console.error('[JMAP] No active session')
       throw new Error('Not authenticated')
     }
 
@@ -130,12 +92,6 @@ export class JMAPClient {
     // Use the proxied URL in development
     const apiUrl = this.getProxiedUrl(this.session.apiUrl)
 
-    console.log('[JMAP] Sending request:', {
-      url: apiUrl,
-      originalUrl: this.session.apiUrl,
-      methods: methodCalls.map(([method]) => method),
-      using: request.using
-    })
 
     try {
       const response = await fetch(apiUrl, {
@@ -148,17 +104,9 @@ export class JMAPClient {
         body: JSON.stringify(request),
       })
 
-      console.log('[JMAP] Request response:', {
-        status: response.status,
-        statusText: response.statusText
-      })
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('[JMAP] Request failed:', {
-          status: response.status,
-          body: errorText
-        })
 
         if (response.status === 401) {
           // Session expired
@@ -170,28 +118,21 @@ export class JMAPClient {
 
       const data: JMAPResponse = await response.json()
 
-      console.log('[JMAP] Response data:', {
-        methodResponses: data.methodResponses.map(([method, , id]) => ({ method, id })),
-        sessionState: data.sessionState
-      })
 
       // Check for method-level errors
       for (const [method, result, id] of data.methodResponses) {
         if (method === 'error') {
-          console.error('[JMAP] Method error:', { method, result, id })
           throw new Error(result.description || 'JMAP method error')
         }
       }
 
       return data.methodResponses
     } catch (error) {
-      console.error('[JMAP] Request error:', error)
       throw error
     }
   }
 
   async getMailboxes(accountId: string): Promise<Mailbox[]> {
-    console.log('[JMAP] Fetching mailboxes for account:', accountId)
 
     const responses = await this.request([
       ['Mailbox/get', { 
@@ -201,10 +142,6 @@ export class JMAPClient {
     ])
 
     const [, result] = responses[0]
-    console.log('[JMAP] Mailboxes fetched:', {
-      count: result.list?.length || 0,
-      state: result.state
-    })
 
     return result.list || []
   }
@@ -215,7 +152,6 @@ export class JMAPClient {
     fromMailboxId: string,
     toMailboxId: string
   ) {
-    console.log('[JMAP] Moving email:', { emailId, from: fromMailboxId, to: toMailboxId })
 
     const update = {
       [emailId]: {
@@ -234,7 +170,6 @@ export class JMAPClient {
     email: any,
     submission: any
   ) {
-    console.log('[JMAP] Sending email:', { accountId, email })
 
     const responses = await this.request([
       ['Email/set', { accountId, create: { draft: email } }, '0'],
@@ -256,17 +191,12 @@ export class JMAPClient {
     accountId: string,
     update: Record<string, Partial<Email>>
   ) {
-    console.log('[JMAP] Updating emails:', { accountId, updates: Object.keys(update) })
 
     const responses = await this.request([
       ['Email/set', { accountId, update }, '0'],
     ])
 
     const result = responses[0][1]
-    console.log('[JMAP] Email update result:', {
-      updated: Object.keys(result.updated || {}),
-      notUpdated: Object.keys(result.notUpdated || {})
-    })
 
     return result
   }
@@ -288,9 +218,9 @@ export class JMAPClient {
     // Use proxy in development
     url = this.getProxiedUrl(url)
 
-    // Add auth token as query parameter for Stalwart
-    const separator = url.includes('?') ? '&' : '?'
-    return `${url}${separator}access_token=${encodeURIComponent(this.accessToken)}`
+    // SECURITY: Do not expose access token in URL - use Authorization header instead
+    // This is a known security vulnerability - tokens should never be in URLs
+    throw new Error('getBlobUrl requires secure implementation - use Authorization header')
   }
 
   // EventSource for push notifications (Stalwart supports this)
@@ -305,13 +235,9 @@ export class JMAPClient {
     // Use proxy in development
     url = this.getProxiedUrl(url)
 
-    // Note: EventSource doesn't support custom headers, so auth must be in URL
-    const separator = url.includes('?') ? '&' : '?'
-    const eventSourceUrl = `${url}${separator}access_token=${encodeURIComponent(this.accessToken)}`
-
-    console.log('[JMAP] Creating EventSource:', eventSourceUrl)
-
-    return new EventSource(eventSourceUrl)
+    // SECURITY: EventSource with auth tokens in URLs is a security vulnerability
+    // Tokens in URLs can be leaked via browser history, referrer headers, server logs
+    throw new Error('createEventSource requires secure implementation - use server-side proxy')
   }
 
   async searchEmails(
@@ -319,7 +245,6 @@ export class JMAPClient {
     query: string,
     limit = 30
   ): Promise<Email[]> {
-    console.log('[JMAP] Searching emails:', { accountId, query, limit })
 
     const responses = await this.request([
       ['Email/query', { 
@@ -363,7 +288,6 @@ export class JMAPClient {
     position = 0,
     limit = 50
   ): Promise<{ emails: Email[]; total: number; position: number }> {
-    console.log('[JMAP] Fetching emails:', { accountId, filter, position, limit })
 
     // Default properties if not specified
     if (!properties) {
@@ -402,14 +326,6 @@ export class JMAPClient {
     const [, queryResult] = responses[0]
     const [, getResult] = responses[1]
 
-    console.log('[JMAP] Emails fetched:', {
-      queryCount: queryResult.ids?.length || 0,
-      fetchedCount: getResult.list?.length || 0,
-      total: queryResult.total,
-      position: queryResult.position,
-      state: getResult.state
-    })
-
     return {
       emails: getResult.list || [],
       total: queryResult.total || 0,
@@ -418,7 +334,6 @@ export class JMAPClient {
   }
 
   async getEmailThread(accountId: string, threadId: string): Promise<Email[]> {
-    console.log('[JMAP] Fetching thread:', { accountId, threadId })
 
     const responses = await this.request([
       ['Email/query', { 
