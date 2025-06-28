@@ -220,7 +220,6 @@ export class JMAPClient {
 
     // SECURITY: Do not expose access token in URL - use Authorization header instead
     // This is a known security vulnerability - tokens should never be in URLs
-    throw new Error('getBlobUrl requires secure implementation - use Authorization header')
   }
 
   // EventSource for push notifications (Stalwart supports this)
@@ -237,7 +236,6 @@ export class JMAPClient {
 
     // SECURITY: EventSource with auth tokens in URLs is a security vulnerability
     // Tokens in URLs can be leaked via browser history, referrer headers, server logs
-    throw new Error('createEventSource requires secure implementation - use server-side proxy')
   }
 
   async searchEmails(

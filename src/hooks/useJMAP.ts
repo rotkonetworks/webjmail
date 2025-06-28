@@ -44,7 +44,7 @@ export function useEmailSearch(query: string, enabled: boolean) {
 export function useEmails(mailboxId: string | null) {
   const session = useAuthStore((state) => state.session)
   const accountId = usePrimaryAccountId()
-  const setEmails = useMailStore((state) => state.setEmails)
+  const setEmails = useMailStore((state) => state.addEmails)
   const [hasMore, setHasMore] = React.useState(true)
   const [total, setTotal] = React.useState(0)
 
@@ -416,15 +416,6 @@ export function useSendEmail() {
                   ...(cc || []).map(addr => ({ email: addr.email })),
                   ...(bcc || []).map(addr => ({ email: addr.email })),
                 ],
-              },
-            },
-          },
-          onSuccessUpdateEmail: {
-            [`#${emailId}`]: {
-              mailboxIds: sentMailbox ? { [sentMailbox.id]: true } : {},
-              keywords: {
-                $draft: null,
-                $sent: true,
               },
             },
           },

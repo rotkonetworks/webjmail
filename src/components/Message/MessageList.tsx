@@ -53,6 +53,15 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     showServerSearch
   )
   
+  // Force refetch from server if no offline data
+  useEffect(() => {
+    if (!offlineData?.emails?.length && selectedMailboxId && !isLoading) {
+      console.log("[MessageList] No offline data, fetching from server")
+      refetch()
+      fetchNextPage()
+    }
+  }, [selectedMailboxId, offlineData, isLoading, refetch, fetchNextPage])
+  
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
   const listRef = useRef<HTMLDivElement>(null)

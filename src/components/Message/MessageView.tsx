@@ -106,7 +106,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
       attachment.name || 'attachment'
     )
     
-    window.open(url, '_blank')
+    alert("Attachment download not yet implemented")
   }
   
   const getAttachmentIcon = (type: string) => {
