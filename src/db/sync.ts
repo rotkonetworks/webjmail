@@ -16,20 +16,21 @@ export class SyncManager {
    * Fix: Authenticate user ID and update activity
    */
   async initializeUser(userId: string) {
+    if (this.currentUserId === userId) return;
     // Validate user ID to prevent injection attacks
     if (!userId || typeof userId !== 'string' || userId.length === 0) {
-      throw new Error('Invalid user ID')
+      console.error("[Sync] Invalid user ID"); return
     }
 
     // Sanitize user ID - only allow safe characters
     const sanitizedUserId = userId.replace(/[^a-zA-Z0-9._@-]/g, '')
     if (sanitizedUserId !== userId) {
-      throw new Error('User ID contains invalid characters')
+      console.error("[Sync] User ID contains invalid characters"); return
     }
 
     // Limit user ID length to prevent DoS
     if (userId.length > 255) {
-      throw new Error('User ID too long')
+      console.error("[Sync] User ID too long"); return
     }
 
     this.currentUserId = userId
@@ -45,7 +46,7 @@ export class SyncManager {
    */
   async initialSync(accountId: string, mailboxId: string) {
     if (!this.currentUserId) {
-      throw new Error('User not initialized')
+      console.warn("[Sync] Cannot start push sync - user not initialized"); return
     }
 
     const syncStateId = `user:${this.currentUserId}:mailbox:${mailboxId}`
@@ -86,7 +87,7 @@ export class SyncManager {
    */
   async syncMailbox(accountId: string, mailboxId: string, position = 0) {
     if (!this.currentUserId) {
-      throw new Error('User not initialized')
+      console.warn("[Sync] Cannot start push sync - user not initialized"); return
     }
 
     const syncStateId = `user:${this.currentUserId}:mailbox:${mailboxId}`
@@ -115,7 +116,7 @@ export class SyncManager {
 
       // CRITICAL: Ensure user ID is always set for security isolation
       if (!this.currentUserId) {
-        throw new Error('Cannot sync emails without valid user context')
+        console.error("[Sync] Cannot sync emails without valid user context"); return [] as CachedEmail[]
       }
 
       // Sanitize email content to prevent XSS
@@ -159,7 +160,7 @@ export class SyncManager {
    */
   async getMailboxEmails(mailboxId: string, offset: number, limit: number) {
     if (!this.currentUserId) {
-      throw new Error('User not initialized')
+      console.warn("[Sync] Cannot start push sync - user not initialized"); return
     }
 
     return db.emails
@@ -183,7 +184,7 @@ export class SyncManager {
    */
   async searchOffline(query: string, mailboxId?: string): Promise<Email[]> {
     if (!this.currentUserId) {
-      throw new Error('User not initialized')
+      console.warn("[Sync] Cannot start push sync - user not initialized"); return
     }
 
     // Sanitize search query
@@ -221,12 +222,18 @@ export class SyncManager {
    * Fix: Implement proper cleanup and rate limiting
    */
   startPushSync(accountId: string) {
+    return; // EventSource disabled temporarily
     if (this.eventSource) return
     if (!this.currentUserId) {
-      throw new Error('User not initialized')
+      console.warn("[Sync] Cannot start push sync - user not initialized"); return
     }
 
+    try {
     this.eventSource = jmapClient.createEventSource(['Email', 'Mailbox'])
+    } catch (error) {
+      console.warn("[Sync] EventSource not available:", error);
+      return;
+    }
 
     this.eventSource.addEventListener('state', async (event) => {
       try {

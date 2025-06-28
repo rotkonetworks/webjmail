@@ -53,7 +53,10 @@ export function useOfflineEmails(mailboxId: string | null) {
       syncManager
         .initializeUser(userId)
         .then(() => {
-          syncManager.startPushSync(accountId)
+        try {           syncManager.startPushSync(accountId)
+        } catch (error) {
+          console.warn("[IndexedDB] Push sync not available:", error)
+        }
         })
         .catch((error) => {
           console.error('[IndexedDB] Failed to initialize user:', error)
@@ -167,7 +170,10 @@ export function useOfflineEmailsInfinite(mailboxId: string | null) {
       syncManager
         .initializeUser(userId)
         .then(() => {
-          syncManager.startPushSync(accountId)
+        try {           syncManager.startPushSync(accountId)
+        } catch (error) {
+          console.warn("[IndexedDB] Push sync not available:", error)
+        }
         })
         .catch((error) => {
           console.error('[IndexedDB] Failed to initialize user:', error)

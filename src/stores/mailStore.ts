@@ -52,7 +52,6 @@ export const useMailStore = create<MailState>()(
       set((state) => {
         state.selectedMailboxId = mailboxId
         state.emails = {}
-        state.emails = {}
         state.selectedEmailId = null
       }),
 
