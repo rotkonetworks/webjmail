@@ -32,11 +32,6 @@ export class SyncManager {
       throw new Error('User ID too long')
     }
 
-    // Limit user ID length to prevent DoS
-    if (userId.length > 255) {
-      throw new Error('User ID too long')
-    }
-
     this.currentUserId = userId
     await db.updateUserActivity(userId)
   }
@@ -56,7 +51,7 @@ export class SyncManager {
     const syncStateId = `user:${this.currentUserId}:mailbox:${mailboxId}`
     const existingState = await db.syncStates.get(syncStateId)
 
-    // Check if we have cached data
+    // Always check cached data first
     const cachedCount = await db.emails
       .where('[_userId+_mailboxIds+receivedAt]')
       .between(
@@ -65,14 +60,19 @@ export class SyncManager {
       )
       .count()
 
-    if (cachedCount > 0 && existingState) {
+    // If we have recent data (less than 5 minutes old), use it
+    if (cachedCount > 0 && existingState && (Date.now() - existingState.lastSync < 5 * 60 * 1000)) {
+      console.log('[Sync] Using cached data for', mailboxId, 'count:', cachedCount)
       // Return cached data immediately
+      const emails = await this.getMailboxEmails(mailboxId, 0, 50)
       return {
         fromCache: true,
-        emails: await this.getMailboxEmails(mailboxId, 0, 50),
+        emails,
+        total: cachedCount,
       }
     }
 
+    console.log('[Sync] Cache miss or stale, syncing from server for', mailboxId)
     // Perform fresh sync
     return this.syncMailbox(accountId, mailboxId)
   }
@@ -92,6 +92,14 @@ export class SyncManager {
     const syncStateId = `user:${this.currentUserId}:mailbox:${mailboxId}`
     const syncState = await db.syncStates.get(syncStateId)
 
+    // Check if we already have this data range cached
+    if (syncState && position > 0 && position <= syncState.position) {
+      console.log('[Sync] Already have data up to position', position)
+      const emails = await this.getMailboxEmails(mailboxId, position, 50)
+      return { emails, total: syncState.position, fromCache: true }
+    }
+
+    console.log('[Sync] Fetching from server:', mailboxId, 'position:', position)
     const {
       emails,
       total,
@@ -121,20 +129,24 @@ export class SyncManager {
         _userId: this.currentUserId, // REQUIRED field for security
         preview: sanitizedPreview,
         subject: sanitizedSubject,
-      }
+      } as CachedEmail
     })
 
     await db.transaction('rw', db.emails, db.syncStates, async () => {
-      await db.emails.bulkPut(cachedEmails)
+      // Use put to update existing emails
+      for (const email of cachedEmails) {
+        await db.emails.put(email)
+      }
       await db.syncStates.put({
         id: syncStateId,
         state: '', // Would come from JMAP response
-        lastSync: Date.now(),
-        position: newPosition,
+        lastSync: Date.now(), 
+        position: Math.max(syncState?.position || 0, newPosition),
         userId: this.currentUserId!,
       })
     })
 
+    console.log('[Sync] Stored', cachedEmails.length, 'emails in IndexedDB')
     return { emails: cachedEmails, total, fromCache: false }
   }
 

@@ -45,6 +45,7 @@ export function useOfflineEmails(mailboxId: string | null) {
   const accountId = usePrimaryAccountId()
   const session = useAuthStore((state) => state.session)
   const userId = useCurrentUserId()
+  const loadMore = useLoadMoreEmails()
 
   // Initialize sync manager with current user
   useEffect(() => {
@@ -62,11 +63,11 @@ export function useOfflineEmails(mailboxId: string | null) {
     }
   }, [userId, accountId, session])
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['emails', 'offline', userId, mailboxId],
     queryFn: async () => {
       if (!mailboxId || !accountId || !userId) {
-        return { emails: [], total: 0, fromCache: false }
+        return { emails: [], total: 0, fromCache: false, hasMore: false }
       }
 
       try {
@@ -89,14 +90,16 @@ export function useOfflineEmails(mailboxId: string | null) {
             emails: cachedEmails,
             total,
             fromCache: true,
+            hasMore: cachedEmails.length < total,
           }
         }
 
         // If no cache, sync from server
-        return syncManager.syncMailbox(accountId, mailboxId)
+        const result = await syncManager.syncMailbox(accountId, mailboxId)
+        return { ...result, hasMore: result.emails.length < result.total }
       } catch (error) {
         console.error('[IndexedDB] Failed to fetch emails:', error)
-        return { emails: [], total: 0, fromCache: false }
+        return { emails: [], total: 0, fromCache: false, hasMore: false }
       }
     },
     enabled: !!session && !!accountId && !!mailboxId && !!userId,
@@ -105,6 +108,13 @@ export function useOfflineEmails(mailboxId: string | null) {
     refetchInterval: 5 * 60 * 1000, // Every 5 minutes
     refetchIntervalInBackground: true,
   })
+
+  return {
+    data: query.data,
+    isLoading: query.isLoading,
+    refetch: query.refetch,
+    loadMore,
+  }
 }
 
 /**
@@ -212,10 +222,12 @@ export function useOfflineEmailsInfinite(mailboxId: string | null) {
 export function useLoadMoreEmails() {
   const queryClient = useQueryClient()
   const userId = useCurrentUserId()
+  const accountId = usePrimaryAccountId()
 
   return useMutation({
     mutationFn: async ({ mailboxId, offset }: { mailboxId: string; offset: number }) => {
       if (!userId) throw new Error('User not authenticated')
+      if (!accountId) throw new Error('No account ID')
 
       // Rate limiting check
       const now = Date.now()
@@ -231,18 +243,25 @@ export function useLoadMoreEmails() {
         await syncManager.initializeUser(userId)
       }
 
-      return syncManager.getMailboxEmails(mailboxId, offset, 50)
+      // Sync next batch from server
+      const result = await syncManager.syncMailbox(accountId, mailboxId, offset)
+      return result.emails
     },
     onSuccess: (newEmails, { mailboxId }) => {
-      // Update infinite query cache
-      queryClient.setQueryData(['emails', 'infinite', userId, mailboxId], (old: any) => {
-        if (!old) return { emails: newEmails, hasMore: newEmails.length === 50, total: 0 }
+      // Update the offline query cache
+      queryClient.setQueryData(['emails', 'offline', userId, mailboxId], (old: any) => {
+        if (!old) return { emails: newEmails, hasMore: newEmails.length === 50, total: 0, fromCache: false }
 
-        const allEmails = [...old.emails, ...newEmails]
+        // Deduplicate emails by ID
+        const existingIds = new Set(old.emails.map((e: any) => e.id))
+        const uniqueNewEmails = newEmails.filter((e: any) => !existingIds.has(e.id))
+        const allEmails = [...old.emails, ...uniqueNewEmails]
+        
         return {
           ...old,
           emails: allEmails,
           hasMore: newEmails.length === 50,
+          total: Math.max(old.total, allEmails.length),
         }
       })
     },

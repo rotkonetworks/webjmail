@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useRef, useState } from 'react'
-import { useEmails, useEmailSearch } from '../../hooks/useJMAP'
-import { useOfflineEmails, useOfflineSearch } from '../../hooks/useIndexedDB'
+import { useEmailSearch } from '../../hooks/useJMAP'
+import { useOfflineEmails, useOfflineSearch, useLoadMoreEmails } from '../../hooks/useIndexedDB'
 import { useMailStore } from '../../stores/mailStore'
 import { format, isToday, isYesterday } from 'date-fns'
 import DOMPurify from 'dompurify'
@@ -15,16 +15,11 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
 
   // Use offline-first email loading
-  const { data: offlineData, isLoading, refetch } = useOfflineEmails(selectedMailboxId)
+  const { data: offlineData, isLoading, refetch, loadMore } = useOfflineEmails(selectedMailboxId)
 
-  // Fallback to online for infinite scroll if needed
-  const {
-    emails: onlineEmails,
-    isFetchingNextPage,
-    hasMore,
-    total: onlineTotal,
-    fetchNextPage,
-  } = useEmails(selectedMailboxId)
+  // Get loading state for infinite scroll
+  const loadMoreMutation = useLoadMoreEmails()
+  const isFetchingNextPage = loadMoreMutation.isPending
 
   const [searchDebounce, setSearchDebounce] = useState('')
   const [showServerSearch, setShowServerSearch] = useState(false)
@@ -54,9 +49,8 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     if (!offlineData?.emails?.length && selectedMailboxId && !isLoading) {
       console.log('[MessageList] No offline data, fetching from server')
       refetch()
-      fetchNextPage()
     }
-  }, [selectedMailboxId, offlineData, isLoading, refetch, fetchNextPage])
+  }, [selectedMailboxId, offlineData, isLoading, refetch])
 
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
@@ -65,13 +59,13 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
 
   // Intersection observer for infinite scroll with improved cleanup
   useEffect(() => {
-    if (!loadMoreRef.current || !hasMore || showServerSearch) return
+    if (!loadMoreRef.current || !offlineData?.hasMore || showServerSearch) return
 
     const element = loadMoreRef.current
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && !isFetchingNextPage) {
-          fetchNextPage()
+          loadMoreMutation.mutate({ mailboxId: selectedMailboxId!, offset: offlineData?.emails?.length || 0 })
         }
       },
       { threshold: 0.1, rootMargin: '50px' }
@@ -82,7 +76,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     return () => {
       observer.disconnect()
     }
-  }, [hasMore, isFetchingNextPage, fetchNextPage, showServerSearch])
+  }, [offlineData?.hasMore, offlineData?.emails?.length, isFetchingNextPage, loadMoreMutation, selectedMailboxId, showServerSearch])
 
   // Handle Enter key
   useEffect(() => {
@@ -101,9 +95,10 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
   }, [selectedEmailId, onSelectEmail])
 
   // Determine data source with offline-first approach
-  const emails = offlineData?.emails || onlineEmails || []
-  const total = offlineData?.total || onlineTotal || 0
+  const emails = offlineData?.emails || []
+  const total = offlineData?.total || 0
   const fromCache = offlineData?.fromCache || false
+  const hasMore = offlineData?.hasMore || false
 
   // Filter emails with offline-first search
   const filteredEmails = useMemo(() => {
@@ -403,7 +398,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
               </div>
             ) : (
               <button
-                onClick={() => fetchNextPage()}
+                onClick={() => loadMoreMutation.mutate({ mailboxId: selectedMailboxId!, offset: emails.length })}
                 className="text-sm text-[var(--primary-color)] hover:underline"
               >
                 Load more
