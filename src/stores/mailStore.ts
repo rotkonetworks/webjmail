@@ -7,7 +7,7 @@ interface MailState {
   emails: Record<string, Email>
   selectedMailboxId: string | null
   selectedEmailId: string | null
-  
+
   setMailboxes: (mailboxes: Mailbox[]) => void
   setEmails: (emails: Email[]) => void
   addEmails: (emails: Email[]) => void
@@ -80,7 +80,7 @@ export const useMailStore = create<MailState>()(
           // Apply other updates
           Object.keys(updates).forEach((key) => {
             if (key !== 'keywords' && key !== 'mailboxIds') {
-              (state.emails[emailId] as any)[key] = updates[key as keyof Email]
+              ;(state.emails[emailId] as any)[key] = updates[key as keyof Email]
             }
           })
         }

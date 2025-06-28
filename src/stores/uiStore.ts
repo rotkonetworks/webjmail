@@ -13,7 +13,7 @@ interface UIState {
   viewMode: ViewMode
   theme: Theme
   font: Font
-  
+
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   setMessageListWidth: (width: number) => void
@@ -34,22 +34,21 @@ export const useUIStore = create<UIState>()(
       viewMode: 'column',
       theme: 'system',
       font: 'system',
-      
-      toggleSidebar: () =>
-        set((state) => ({ sidebarOpen: !state.sidebarOpen })),
-      
+
+      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
-      
+
       setMessageListWidth: (messageListWidth) => set({ messageListWidth }),
-      
+
       setLoading: (loading) => set({ loading }),
-      
+
       setError: (error) => set({ error }),
-      
+
       setViewMode: (viewMode) => set({ viewMode }),
-      
+
       setTheme: (theme) => set({ theme }),
-      
+
       setFont: (font) => set({ font }),
     }),
     {

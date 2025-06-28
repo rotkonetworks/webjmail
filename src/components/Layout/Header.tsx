@@ -12,7 +12,7 @@ interface HeaderProps {
 export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: HeaderProps) {
   const session = useAuthStore((state) => state.session)
   const searchRef = useRef<HTMLInputElement>(null)
-  
+
   // Focus search on Cmd/Ctrl + K
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -21,14 +21,14 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
         searchRef.current?.focus()
       }
     }
-    
+
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
-  
+
   const username = session?.username || 'User'
   const firstLetter = username.charAt(0).toUpperCase()
-  
+
   return (
     <header className="h-[var(--header-height)] bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex items-center px-4 gap-4">
       {/* Logo */}
@@ -38,7 +38,7 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
         </div>
         <span className="font-semibold text-lg">{config.appName}</span>
       </div>
-      
+
       {/* Search Bar - Central and prominent */}
       <div className="flex-1 max-w-2xl mx-auto">
         <div className="relative">
@@ -61,7 +61,7 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
           )}
         </div>
       </div>
-      
+
       {/* Right side actions */}
       <div className="flex items-center gap-2">
         {/* Compose Button */}
@@ -72,7 +72,7 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
           <div className="i-lucide:edit-3" />
           <span>New message</span>
         </button>
-        
+
         {/* User Menu */}
         <div className="flex items-center gap-3 ml-4">
           <div className="w-8 h-8 bg-[var(--proton-purple)] rounded-full flex items-center justify-center text-sm font-medium">
@@ -80,13 +80,9 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
           </div>
           <span className="text-sm text-[var(--text-secondary)]">{username}</span>
         </div>
-        
+
         {/* Settings */}
-        <button
-          onClick={onSettings}
-          className="settings-btn p-2 rounded-lg ml-2"
-          title="Settings"
-        >
+        <button onClick={onSettings} className="settings-btn p-2 rounded-lg ml-2" title="Settings">
           <div className="i-lucide:settings" />
         </button>
       </div>

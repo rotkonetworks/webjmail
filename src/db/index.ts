@@ -36,21 +36,22 @@ class MailDB extends Dexie {
   syncStates!: Table<SyncState>
   attachments!: Table<AttachmentBlob>
   sessions!: Table<UserSession>
-  
+
   constructor() {
     super('rotko-webmail')
-    
+
     this.version(1).stores({
       // Primary key first, then compound indexes for multi-user support
-      emails: 'id, [_userId+threadId], [_userId+_mailboxIds+receivedAt], [_userId+_mailboxIds+keywords.$seen], [_userId+receivedAt], _syncedAt',
+      emails:
+        'id, [_userId+threadId], [_userId+_mailboxIds+receivedAt], [_userId+_mailboxIds+keywords.$seen], [_userId+receivedAt], _syncedAt',
       mailboxes: 'id, [_userId+role], [_userId+parentId], _userId',
       threads: 'id, [_userId+id], _userId',
       syncStates: 'id, [userId+lastSync], userId',
       attachments: 'blobId, [userId+blobId], userId',
-      sessions: 'id, userId, lastActivity'
+      sessions: 'id, userId, lastActivity',
     })
   }
-  
+
   /**
    * Clear all data for a specific user (secure multi-user isolation)
    * Issue: Data leakage between users
@@ -59,17 +60,25 @@ class MailDB extends Dexie {
    * Fix: Use userId-based filtering for all operations
    */
   async clearUserData(userId: string) {
-    await this.transaction('rw', this.emails, this.mailboxes, this.threads, 
-                          this.syncStates, this.attachments, this.sessions, async () => {
-      await Promise.all([
-        this.emails.where('_userId').equals(userId).delete(),
-        this.mailboxes.where('_userId').equals(userId).delete(),
-        this.threads.where('_userId').equals(userId).delete(),
-        this.syncStates.where('userId').equals(userId).delete(),
-        this.attachments.where('userId').equals(userId).delete(),
-        this.sessions.where('userId').equals(userId).delete()
-      ])
-    })
+    await this.transaction(
+      'rw',
+      this.emails,
+      this.mailboxes,
+      this.threads,
+      this.syncStates,
+      this.attachments,
+      this.sessions,
+      async () => {
+        await Promise.all([
+          this.emails.where('_userId').equals(userId).delete(),
+          this.mailboxes.where('_userId').equals(userId).delete(),
+          this.threads.where('_userId').equals(userId).delete(),
+          this.syncStates.where('userId').equals(userId).delete(),
+          this.attachments.where('userId').equals(userId).delete(),
+          this.sessions.where('userId').equals(userId).delete(),
+        ])
+      }
+    )
   }
 
   /**
@@ -80,17 +89,25 @@ class MailDB extends Dexie {
    * Fix: Use clearUserData for individual users
    */
   async clearAllData() {
-    await this.transaction('rw', this.emails, this.mailboxes, this.threads, 
-                          this.syncStates, this.attachments, this.sessions, async () => {
-      await Promise.all([
-        this.emails.clear(),
-        this.mailboxes.clear(),
-        this.threads.clear(),
-        this.syncStates.clear(),
-        this.attachments.clear(),
-        this.sessions.clear()
-      ])
-    })
+    await this.transaction(
+      'rw',
+      this.emails,
+      this.mailboxes,
+      this.threads,
+      this.syncStates,
+      this.attachments,
+      this.sessions,
+      async () => {
+        await Promise.all([
+          this.emails.clear(),
+          this.mailboxes.clear(),
+          this.threads.clear(),
+          this.syncStates.clear(),
+          this.attachments.clear(),
+          this.sessions.clear(),
+        ])
+      }
+    )
   }
 
   /**
@@ -101,20 +118,17 @@ class MailDB extends Dexie {
    * Fix: Check lastActivity and validate session
    */
   async getCurrentUser(): Promise<string | null> {
-    const session = await this.sessions
-      .orderBy('lastActivity')
-      .reverse()
-      .first()
-    
+    const session = await this.sessions.orderBy('lastActivity').reverse().first()
+
     if (!session) return null
-    
+
     // Session expires after 2 hours of inactivity for security
     const SESSION_TIMEOUT = 2 * 60 * 60 * 1000
     if (Date.now() - session.lastActivity > SESSION_TIMEOUT) {
       await this.sessions.delete(session.id)
       return null
     }
-    
+
     return session.userId
   }
 

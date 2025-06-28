@@ -7,14 +7,14 @@ interface Props {
 export function CommandBar({ onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [command, setCommand] = React.useState('')
-  
+
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     // Handle commands
     switch (command) {
       case 'q':
@@ -27,10 +27,10 @@ export function CommandBar({ onClose }: Props) {
         break
       // Add more commands
     }
-    
+
     onClose()
   }
-  
+
   return (
     <div className="border-t border-bright-black px-4 py-1">
       <form onSubmit={handleSubmit} className="flex items-center gap-2">

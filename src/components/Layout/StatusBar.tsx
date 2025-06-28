@@ -11,20 +11,16 @@ export function StatusBar({ mode }: Props) {
   const mailboxes = useMailStore((state) => state.mailboxes)
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
   const emails = useMailStore((state) => state.emails)
-  
+
   const currentMailbox = selectedMailboxId ? mailboxes[selectedMailboxId] : null
   const emailCount = Object.keys(emails).length
-  
+
   return (
     <div className="status-bar px-4 py-1 flex items-center justify-between text-xs">
       <div className="flex items-center gap-4">
         <span className="text-primary">[{mode}]</span>
-        {currentMailbox && (
-          <span className="text-green">{currentMailbox.name}</span>
-        )}
-        {emailCount > 0 && (
-          <span className="text-cyan">{emailCount} messages</span>
-        )}
+        {currentMailbox && <span className="text-green">{currentMailbox.name}</span>}
+        {emailCount > 0 && <span className="text-cyan">{emailCount} messages</span>}
       </div>
       <div className="flex items-center gap-4">
         <span className="text-yellow">{session?.username}</span>

@@ -7,7 +7,7 @@ export class SyncManager {
   private syncInterval: number | null = null
   private eventSource: EventSource | null = null
   private currentUserId: string | null = null
-  
+
   /**
    * Initialize sync for a specific user
    * Issue: User session validation
@@ -20,18 +20,23 @@ export class SyncManager {
     if (!userId || typeof userId !== 'string' || userId.length === 0) {
       throw new Error('Invalid user ID')
     }
-    
-    // Sanitize user ID - only allow alphanumeric, dots, hyphens, underscores
+
+    // Sanitize user ID - only allow safe characters
     const sanitizedUserId = userId.replace(/[^a-zA-Z0-9._@-]/g, '')
     if (sanitizedUserId !== userId) {
       throw new Error('User ID contains invalid characters')
     }
-    
+
     // Limit user ID length to prevent DoS
     if (userId.length > 255) {
       throw new Error('User ID too long')
     }
-    
+
+    // Limit user ID length to prevent DoS
+    if (userId.length > 255) {
+      throw new Error('User ID too long')
+    }
+
     this.currentUserId = userId
     await db.updateUserActivity(userId)
   }
@@ -50,25 +55,28 @@ export class SyncManager {
 
     const syncStateId = `user:${this.currentUserId}:mailbox:${mailboxId}`
     const existingState = await db.syncStates.get(syncStateId)
-    
+
     // Check if we have cached data
     const cachedCount = await db.emails
       .where('[_userId+_mailboxIds+receivedAt]')
-      .between([this.currentUserId, mailboxId, Dexie.minKey], [this.currentUserId, mailboxId, Dexie.maxKey])
+      .between(
+        [this.currentUserId, mailboxId, Dexie.minKey],
+        [this.currentUserId, mailboxId, Dexie.maxKey]
+      )
       .count()
-    
+
     if (cachedCount > 0 && existingState) {
       // Return cached data immediately
       return {
         fromCache: true,
-        emails: await this.getMailboxEmails(mailboxId, 0, 50)
+        emails: await this.getMailboxEmails(mailboxId, 0, 50),
       }
     }
-    
+
     // Perform fresh sync
     return this.syncMailbox(accountId, mailboxId)
   }
-  
+
   /**
    * Sync mailbox with server
    * Issue: Data validation and sanitization
@@ -83,41 +91,39 @@ export class SyncManager {
 
     const syncStateId = `user:${this.currentUserId}:mailbox:${mailboxId}`
     const syncState = await db.syncStates.get(syncStateId)
-    
-    const { emails, total, position: newPosition } = await jmapClient.getEmails(
-      accountId,
-      { inMailbox: mailboxId },
-      undefined,
-      position,
-      50
-    )
-    
+
+    const {
+      emails,
+      total,
+      position: newPosition,
+    } = await jmapClient.getEmails(accountId, { inMailbox: mailboxId }, undefined, position, 50)
+
     // Validate and transform emails before storage
-    const cachedEmails: CachedEmail[] = emails.map(email => {
+    const cachedEmails: CachedEmail[] = emails.map((email) => {
       // Validate required fields
       if (!email.id || !email.threadId || !email.receivedAt) {
         throw new Error(`Invalid email data: missing required fields`)
       }
-      
+
       // CRITICAL: Ensure user ID is always set for security isolation
       if (!this.currentUserId) {
         throw new Error('Cannot sync emails without valid user context')
       }
-      
+
       // Sanitize email content to prevent XSS
       const sanitizedPreview = email.preview?.replace(/<[^>]*>/g, '').substring(0, 500) || ''
       const sanitizedSubject = email.subject?.replace(/<[^>]*>/g, '').substring(0, 1000) || ''
-      
+
       return {
         ...email,
         _syncedAt: Date.now(),
-        _mailboxIds: Object.keys(email.mailboxIds).filter(id => email.mailboxIds[id]),
+        _mailboxIds: Object.keys(email.mailboxIds).filter((id) => email.mailboxIds[id]),
         _userId: this.currentUserId, // REQUIRED field for security
         preview: sanitizedPreview,
         subject: sanitizedSubject,
       }
     })
-    
+
     await db.transaction('rw', db.emails, db.syncStates, async () => {
       await db.emails.bulkPut(cachedEmails)
       await db.syncStates.put({
@@ -125,13 +131,13 @@ export class SyncManager {
         state: '', // Would come from JMAP response
         lastSync: Date.now(),
         position: newPosition,
-        userId: this.currentUserId!
+        userId: this.currentUserId!,
       })
     })
-    
+
     return { emails: cachedEmails, total, fromCache: false }
   }
-  
+
   /**
    * Get cached emails with user isolation
    * Issue: User data isolation
@@ -146,13 +152,16 @@ export class SyncManager {
 
     return db.emails
       .where('[_userId+_mailboxIds+receivedAt]')
-      .between([this.currentUserId, mailboxId, Dexie.minKey], [this.currentUserId, mailboxId, Dexie.maxKey])
+      .between(
+        [this.currentUserId, mailboxId, Dexie.minKey],
+        [this.currentUserId, mailboxId, Dexie.maxKey]
+      )
       .reverse() // Most recent first
       .offset(offset)
       .limit(limit)
       .toArray()
   }
-  
+
   /**
    * Offline search with user isolation
    * Issue: Search injection and user isolation
@@ -168,25 +177,30 @@ export class SyncManager {
     // Sanitize search query
     const q = query.toLowerCase().trim().substring(0, 100)
     if (q.length === 0) return []
-    
-    let collection = mailboxId 
-      ? db.emails.where('[_userId+_mailboxIds+receivedAt]')
-          .between([this.currentUserId, mailboxId, Dexie.minKey], [this.currentUserId, mailboxId, Dexie.maxKey])
+
+    let collection = mailboxId
+      ? db.emails
+          .where('[_userId+_mailboxIds+receivedAt]')
+          .between(
+            [this.currentUserId, mailboxId, Dexie.minKey],
+            [this.currentUserId, mailboxId, Dexie.maxKey]
+          )
       : db.emails.where('_userId').equals(this.currentUserId)
-    
+
     const results = await collection
-      .filter(email => 
-        email.subject?.toLowerCase().includes(q) ||
-        email.from?.[0]?.email?.toLowerCase().includes(q) ||
-        email.from?.[0]?.name?.toLowerCase().includes(q) ||
-        email.preview?.toLowerCase().includes(q)
+      .filter(
+        (email) =>
+          email.subject?.toLowerCase().includes(q) ||
+          email.from?.[0]?.email?.toLowerCase().includes(q) ||
+          email.from?.[0]?.name?.toLowerCase().includes(q) ||
+          email.preview?.toLowerCase().includes(q)
       )
       .limit(30)
       .toArray()
-    
+
     return results
   }
-  
+
   /**
    * Start real-time push sync
    * Issue: EventSource security and resource management
@@ -199,9 +213,9 @@ export class SyncManager {
     if (!this.currentUserId) {
       throw new Error('User not initialized')
     }
-    
+
     this.eventSource = jmapClient.createEventSource(['Email', 'Mailbox'])
-    
+
     this.eventSource.addEventListener('state', async (event) => {
       try {
         const data = JSON.parse(event.data)
@@ -223,7 +237,7 @@ export class SyncManager {
       }, 5000)
     })
   }
-  
+
   /**
    * Handle email changes from push notifications
    * Issue: Change validation and rate limiting
@@ -237,23 +251,27 @@ export class SyncManager {
     // Get changes since last state
     const syncState = await db.syncStates.get(`user:${this.currentUserId}:global`)
     if (!syncState) return
-    
+
     try {
       const changes = await jmapClient.request([
-        ['Email/changes', {
-          accountId,
-          sinceState: syncState.state,
-          maxChanges: 500 // Limit to prevent overwhelming
-        }, '0']
+        [
+          'Email/changes',
+          {
+            accountId,
+            sinceState: syncState.state,
+            maxChanges: 500, // Limit to prevent overwhelming
+          },
+          '0',
+        ],
       ])
-      
+
       // Process changes in batches to avoid blocking
       // Implementation would handle created, updated, destroyed arrays
     } catch (error) {
       console.error('[Sync] Failed to handle email changes:', error)
     }
   }
-  
+
   /**
    * Prefetch email bodies for performance
    * Issue: Resource management and user isolation
@@ -269,18 +287,19 @@ export class SyncManager {
 
     // Batch fetch email bodies that aren't cached
     const emails = await db.emails
-      .where('_userId').equals(this.currentUserId)
-      .and(email => emailIds.includes(email.id))
+      .where('_userId')
+      .equals(this.currentUserId)
+      .and((email) => emailIds.includes(email.id))
       .toArray()
-      
-    const needsBodies = emails.filter(e => !e.bodyValues)
-    
+
+    const needsBodies = emails.filter((e) => !e.bodyValues)
+
     if (needsBodies.length === 0) return
-    
+
     // Fetch from server in smaller batches
     // Implementation would fetch and update cached emails
   }
-  
+
   /**
    * Clean shutdown of sync manager
    * Issue: Resource cleanup

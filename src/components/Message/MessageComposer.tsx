@@ -17,36 +17,42 @@ interface MessageComposerProps {
 export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageComposerProps) {
   const session = useAuthStore((state) => state.session)
   const sendEmail = useSendEmail()
-  
+
   const [to, setTo] = useState(
-    mode === 'reply' && replyTo ? replyTo.from.map(a => a.email).join(', ') :
-    mode === 'replyAll' && replyTo ? 
-      [...replyTo.from, ...replyTo.to.filter(a => a.email !== session?.username)]
-        .map(a => a.email).join(', ') : ''
+    mode === 'reply' && replyTo
+      ? replyTo.from.map((a) => a.email).join(', ')
+      : mode === 'replyAll' && replyTo
+        ? [...replyTo.from, ...replyTo.to.filter((a) => a.email !== session?.username)]
+            .map((a) => a.email)
+            .join(', ')
+        : ''
   )
   const [cc, setCc] = useState(
-    mode === 'replyAll' && replyTo?.cc ? replyTo.cc.map(a => a.email).join(', ') : ''
+    mode === 'replyAll' && replyTo?.cc ? replyTo.cc.map((a) => a.email).join(', ') : ''
   )
   const [subject, setSubject] = useState(
-    replyTo ? 
-      (mode === 'forward' ? `Fwd: ${replyTo.subject}` : 
-       replyTo.subject.startsWith('Re:') ? replyTo.subject : `Re: ${replyTo.subject}`) 
-    : ''
+    replyTo
+      ? mode === 'forward'
+        ? `Fwd: ${replyTo.subject}`
+        : replyTo.subject.startsWith('Re:')
+          ? replyTo.subject
+          : `Re: ${replyTo.subject}`
+      : ''
   )
   const [body, setBody] = useState('')
   const [isSending, setIsSending] = useState(false)
-  
+
   const handleSend = async () => {
     if (!to.trim()) {
       alert('Please enter at least one recipient')
       return
     }
-    
+
     setIsSending(true)
     try {
       await sendEmail.mutateAsync({
-        to: to.split(',').map(email => ({ email: email.trim() })),
-        cc: cc ? cc.split(',').map(email => ({ email: email.trim() })) : undefined,
+        to: to.split(',').map((email) => ({ email: email.trim() })),
+        cc: cc ? cc.split(',').map((email) => ({ email: email.trim() })) : undefined,
         subject,
         textBody: body,
         inReplyTo: mode === 'reply' || mode === 'replyAll' ? replyTo?.emailId : undefined,
@@ -59,16 +65,20 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
       setIsSending(false)
     }
   }
-  
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-[var(--bg-secondary)] rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-[var(--border-color)]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)]">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-            {mode === 'compose' ? 'New Message' :
-             mode === 'reply' ? 'Reply' :
-             mode === 'replyAll' ? 'Reply All' : 'Forward'}
+            {mode === 'compose'
+              ? 'New Message'
+              : mode === 'reply'
+                ? 'Reply'
+                : mode === 'replyAll'
+                  ? 'Reply All'
+                  : 'Forward'}
           </h2>
           <button
             onClick={onClose}
@@ -77,13 +87,11 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
             <div className="i-lucide:x text-[var(--text-secondary)]" />
           </button>
         </div>
-        
+
         {/* Form */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
-              To
-            </label>
+            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">To</label>
             <input
               type="text"
               value={to}
@@ -93,11 +101,9 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
               disabled={isSending}
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
-              Cc
-            </label>
+            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">Cc</label>
             <input
               type="text"
               value={cc}
@@ -107,7 +113,7 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
               disabled={isSending}
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
               Subject
@@ -121,7 +127,7 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
               disabled={isSending}
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
               Message
@@ -135,7 +141,7 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
             />
           </div>
         </div>
-        
+
         {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-[var(--border-color)]">
           <div className="flex items-center gap-2">
@@ -147,7 +153,7 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
               <div className="i-lucide:paperclip text-[var(--text-secondary)]" />
             </button>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}

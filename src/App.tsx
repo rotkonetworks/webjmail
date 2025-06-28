@@ -16,7 +16,7 @@ const queryClient = new QueryClient({
 
 function AppContent() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
-  
+
   useEffect(() => {
     useAuthStore.getState().restoreSession()
   }, [])

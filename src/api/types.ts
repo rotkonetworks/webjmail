@@ -393,9 +393,9 @@ export interface PatchObject {
 }
 
 // Error types
-export type ErrorType = 
+export type ErrorType =
   | 'serverUnavailable'
-  | 'serverFail' 
+  | 'serverFail'
   | 'serverPartialFail'
   | 'unknownCapability'
   | 'noSuchAccount'

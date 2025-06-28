@@ -43,7 +43,7 @@ export function Layout() {
         // Enter key behavior handled by MessageList component
       }
     }
-    
+
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedEmailId, viewMode])
@@ -51,29 +51,26 @@ export function Layout() {
   return (
     <div className="h-screen flex flex-col bg-[var(--bg-primary)]">
       {/* Header */}
-      <Header 
+      <Header
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onCompose={() => setShowComposer(true)}
         onSettings={() => setShowSettings(!showSettings)}
       />
-      
+
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar - always visible */}
         <Sidebar />
-        
+
         {/* Content area based on view mode */}
         {viewMode === 'column' ? (
           <>
             {/* Column Mode: Split view */}
             <div className="w-[400px] bg-[var(--bg-secondary)] border-r border-[var(--border-color)] overflow-hidden">
-              <MessageList 
-                searchQuery={searchQuery} 
-                onSelectEmail={handleEmailSelect}
-              />
+              <MessageList searchQuery={searchQuery} onSelectEmail={handleEmailSelect} />
             </div>
-            
+
             {/* Email view area */}
             <div className="flex-1 bg-[var(--bg-primary)] overflow-hidden relative">
               {selectedEmailId ? (
@@ -87,13 +84,10 @@ export function Layout() {
                   </div>
                 </div>
               )}
-              
+
               {/* Settings Panel overlays on right */}
               {showSettings && (
-                <SettingsPanel 
-                  isOpen={showSettings} 
-                  onClose={() => setShowSettings(false)} 
-                />
+                <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
               )}
             </div>
           </>
@@ -108,29 +102,24 @@ export function Layout() {
                 </div>
               ) : (
                 // Show message list
-                <MessageList 
-                  searchQuery={searchQuery} 
+                <MessageList
+                  searchQuery={searchQuery}
                   viewMode="row"
                   onSelectEmail={handleEmailSelect}
                 />
               )}
-              
+
               {/* Settings Panel overlays on right */}
               {showSettings && (
-                <SettingsPanel 
-                  isOpen={showSettings} 
-                  onClose={() => setShowSettings(false)} 
-                />
+                <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
               )}
             </div>
           </>
         )}
       </div>
-      
+
       {/* Composer Modal */}
-      {showComposer && (
-        <MessageComposer onClose={() => setShowComposer(false)} />
-      )}
+      {showComposer && <MessageComposer onClose={() => setShowComposer(false)} />}
     </div>
   )
 }

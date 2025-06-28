@@ -56,7 +56,10 @@ export function Login() {
         <div className="bg-[var(--bg-secondary)] py-8 px-4 shadow-xl rounded-lg sm:px-10 border border-[var(--border-color)]">
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="server" className="block text-sm font-medium text-[var(--text-primary)]">
+              <label
+                htmlFor="server"
+                className="block text-sm font-medium text-[var(--text-primary)]"
+              >
                 JMAP Server
               </label>
               <div className="mt-1">
@@ -78,7 +81,10 @@ export function Login() {
             </div>
 
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-[var(--text-primary)]">
+              <label
+                htmlFor="username"
+                className="block text-sm font-medium text-[var(--text-primary)]"
+              >
                 Username
               </label>
               <div className="mt-1">
@@ -102,7 +108,10 @@ export function Login() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-[var(--text-primary)]">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-[var(--text-primary)]"
+              >
                 Password
               </label>
               <div className="mt-1">
@@ -160,7 +169,9 @@ export function Login() {
                 <div className="w-full border-t border-[var(--border-color)]" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-[var(--bg-secondary)] text-[var(--text-tertiary)]">Quick select</span>
+                <span className="px-2 bg-[var(--bg-secondary)] text-[var(--text-tertiary)]">
+                  Quick select
+                </span>
               </div>
             </div>
 
@@ -180,7 +191,9 @@ export function Login() {
                 >
                   <div className="i-lucide:server text-[var(--text-secondary)] mr-3" />
                   <div className="text-left flex-1">
-                    <div className="text-sm font-medium text-[var(--text-primary)]">{preset.name}</div>
+                    <div className="text-sm font-medium text-[var(--text-primary)]">
+                      {preset.name}
+                    </div>
                     <div className="text-xs text-[var(--text-tertiary)]">{preset.description}</div>
                   </div>
                 </button>

@@ -30,7 +30,7 @@ export function useMailboxes() {
 export function useEmailSearch(query: string, enabled: boolean) {
   const accountId = usePrimaryAccountId()
   const session = useAuthStore((state) => state.session)
-  
+
   return useQuery({
     queryKey: ['search', accountId, query],
     queryFn: async () => {
@@ -60,7 +60,7 @@ export function useEmails(mailboxId: string | null) {
         pageParam,
         50
       )
-      
+
       return result
     },
     getNextPageParam: (lastPage, allPages) => {
@@ -77,9 +77,9 @@ export function useEmails(mailboxId: string | null) {
   // Update store when data changes
   React.useEffect(() => {
     if (query.data) {
-      const allEmails = query.data.pages.flatMap(page => page.emails)
+      const allEmails = query.data.pages.flatMap((page) => page.emails)
       setEmails(allEmails)
-      
+
       const lastPage = query.data.pages[query.data.pages.length - 1]
       setTotal(lastPage.total)
       setHasMore(query.hasNextPage ?? false)
@@ -87,7 +87,7 @@ export function useEmails(mailboxId: string | null) {
   }, [query.data, setEmails])
 
   return {
-    emails: query.data?.pages.flatMap(page => page.emails) ?? [],
+    emails: query.data?.pages.flatMap((page) => page.emails) ?? [],
     isLoading: query.isLoading,
     isFetchingNextPage: query.isFetchingNextPage,
     hasMore,
@@ -118,15 +118,9 @@ export function useMarkAsRead() {
   const updateEmail = useMailStore((state) => state.updateEmail)
 
   return useMutation({
-    mutationFn: async ({
-      emailId,
-      isRead,
-    }: {
-      emailId: string
-      isRead: boolean
-    }) => {
+    mutationFn: async ({ emailId, isRead }: { emailId: string; isRead: boolean }) => {
       if (!accountId) throw new Error('No account ID')
-      
+
       const update = {
         [emailId]: {
           keywords: {
@@ -200,20 +194,18 @@ export function useDeleteEmail() {
   const deleteEmailFromStore = useMailStore((state) => state.deleteEmail)
 
   return useMutation({
-    mutationFn: async ({
-      accountId,
-      emailId,
-    }: {
-      accountId: string
-      emailId: string
-    }) => {
+    mutationFn: async ({ accountId, emailId }: { accountId: string; emailId: string }) => {
       const result = await jmapClient.request([
-        ['Email/set', {
-          accountId,
-          destroy: [emailId],
-        }, '0'],
+        [
+          'Email/set',
+          {
+            accountId,
+            destroy: [emailId],
+          },
+          '0',
+        ],
       ])
-      
+
       return result
     },
     onSuccess: (_, { emailId }) => {
@@ -296,26 +288,29 @@ export function useSendEmail() {
       if (!to || to.length === 0) {
         throw new Error('At least one recipient is required')
       }
-      
+
       // Validate email addresses
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      const validateEmailAddresses = (addresses: Array<{ name?: string; email: string }>, fieldName: string) => {
+      const validateEmailAddresses = (
+        addresses: Array<{ name?: string; email: string }>,
+        fieldName: string
+      ) => {
         for (const addr of addresses) {
           if (!addr.email || !emailRegex.test(addr.email)) {
             throw new Error(`Invalid email address in ${fieldName}: ${addr.email}`)
           }
         }
       }
-      
+
       validateEmailAddresses(to, 'to')
       if (cc) validateEmailAddresses(cc, 'cc')
       if (bcc) validateEmailAddresses(bcc, 'bcc')
-      
+
       // Validate subject length
       if (subject && subject.length > 998) {
         throw new Error('Subject line too long (max 998 characters)')
       }
-      
+
       // Validate body content size (prevent DoS)
       const maxBodySize = 1024 * 1024 * 5 // 5MB limit
       if (textBody && textBody.length > maxBodySize) {
@@ -326,18 +321,20 @@ export function useSendEmail() {
       }
 
       // Find drafts and sent mailboxes
-      const draftsMailbox = Object.values(mailboxes).find(m => m.role === 'drafts')
-      const sentMailbox = Object.values(mailboxes).find(m => m.role === 'sent')
+      const draftsMailbox = Object.values(mailboxes).find((m) => m.role === 'drafts')
+      const sentMailbox = Object.values(mailboxes).find((m) => m.role === 'sent')
 
       const emailId = `email-${Date.now()}`
-      
+
       // Create a simplified email structure for better compatibility
       const emailData: any = {
         mailboxIds: {},
-        from: [{ 
-          name: session.accounts[accountId]?.name || null,
-          email: session.username 
-        }],
+        from: [
+          {
+            name: session.accounts[accountId]?.name || null,
+            email: session.username,
+          },
+        ],
         to,
         subject: subject || '',
         keywords: {
@@ -361,24 +358,24 @@ export function useSendEmail() {
           partId: '1',
         }
         emailData.bodyValues = {
-          '1': { 
+          '1': {
             value: textBody,
             isEncodingProblem: false,
-            isTruncated: false
-          }
+            isTruncated: false,
+          },
         }
         emailData.textBody = [{ partId: '1' }]
       } else if (htmlBody) {
         emailData.bodyStructure = {
-          type: 'text/html', 
+          type: 'text/html',
           partId: '1',
         }
         emailData.bodyValues = {
-          '1': { 
+          '1': {
             value: htmlBody,
             isEncodingProblem: false,
-            isTruncated: false
-          }
+            isTruncated: false,
+          },
         }
         emailData.htmlBody = [{ partId: '1' }]
       }
@@ -394,34 +391,40 @@ export function useSendEmail() {
         emailData.attachments = attachments
       }
 
-
       const result = await jmapClient.request([
         // Create the email
-        ['Email/set', {
-          accountId,
-          create: {
-            [emailId]: emailData
+        [
+          'Email/set',
+          {
+            accountId,
+            create: {
+              [emailId]: emailData,
+            },
           },
-        }, '0'],
+          '0',
+        ],
         // Submit the email for sending
-        ['EmailSubmission/set', {
-          accountId,
-          create: {
-            [`submission-${Date.now()}`]: {
-              emailId: `#${emailId}`,
-              envelope: {
-                mailFrom: { email: session.username },
-                rcptTo: [
-                  ...to.map(addr => ({ email: addr.email })),
-                  ...(cc || []).map(addr => ({ email: addr.email })),
-                  ...(bcc || []).map(addr => ({ email: addr.email })),
-                ],
+        [
+          'EmailSubmission/set',
+          {
+            accountId,
+            create: {
+              [`submission-${Date.now()}`]: {
+                emailId: `#${emailId}`,
+                envelope: {
+                  mailFrom: { email: session.username },
+                  rcptTo: [
+                    ...to.map((addr) => ({ email: addr.email })),
+                    ...(cc || []).map((addr) => ({ email: addr.email })),
+                    ...(bcc || []).map((addr) => ({ email: addr.email })),
+                  ],
+                },
               },
             },
           },
-        }, '1'],
+          '1',
+        ],
       ])
-
 
       return result
     },

@@ -14,23 +14,23 @@ import { usePrimaryAccountId } from './useJMAP'
  * Fix: Use hash-based user ID and validate session
  */
 function useCurrentUserId(): string | null {
-  const session = useAuthStore(state => state.session)
-  
+  const session = useAuthStore((state) => state.session)
+
   if (!session?.username) return null
-  
+
   // Create a consistent, safe user ID from username + server
   // This prevents username collisions across different servers
   const serverUrl = session.apiUrl || 'unknown'
   const userIdentifier = `${session.username}@${new URL(serverUrl).hostname}`
-  
+
   // Create a simple hash for consistent user ID (in production, use crypto.subtle)
   let hash = 0
   for (let i = 0; i < userIdentifier.length; i++) {
     const char = userIdentifier.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
+    hash = (hash << 5) - hash + char
     hash = hash & hash // Convert to 32-bit integer
   }
-  
+
   return `user_${Math.abs(hash).toString(36)}`
 }
 
@@ -43,52 +43,55 @@ function useCurrentUserId(): string | null {
  */
 export function useOfflineEmails(mailboxId: string | null) {
   const accountId = usePrimaryAccountId()
-  const session = useAuthStore(state => state.session)
+  const session = useAuthStore((state) => state.session)
   const userId = useCurrentUserId()
-  
+
   // Initialize sync manager with current user
   useEffect(() => {
     if (userId && accountId && session) {
-      syncManager.initializeUser(userId).then(() => {
-        syncManager.startPushSync(accountId)
-      }).catch(error => {
-        console.error('[IndexedDB] Failed to initialize user:', error)
-      })
-      
+      syncManager
+        .initializeUser(userId)
+        .then(() => {
+          syncManager.startPushSync(accountId)
+        })
+        .catch((error) => {
+          console.error('[IndexedDB] Failed to initialize user:', error)
+        })
+
       return () => syncManager.stop()
     }
   }, [userId, accountId, session])
-  
+
   return useQuery({
     queryKey: ['emails', 'offline', userId, mailboxId],
     queryFn: async () => {
       if (!mailboxId || !accountId || !userId) {
         return { emails: [], total: 0, fromCache: false }
       }
-      
+
       try {
         // Ensure sync manager is initialized for this user
         if (syncManager.getCurrentUserId() !== userId) {
           await syncManager.initializeUser(userId)
         }
-        
+
         // Try offline first
         const cachedEmails = await syncManager.getMailboxEmails(mailboxId, 0, 50)
-        
+
         if (cachedEmails.length > 0) {
           // Return cached data immediately
           const total = await db.emails
             .where('[_userId+_mailboxIds+receivedAt]')
             .between([userId, mailboxId, Dexie.minKey], [userId, mailboxId, Dexie.maxKey])
             .count()
-            
-          return { 
-            emails: cachedEmails, 
+
+          return {
+            emails: cachedEmails,
             total,
-            fromCache: true 
+            fromCache: true,
           }
         }
-        
+
         // If no cache, sync from server
         return syncManager.syncMailbox(accountId, mailboxId)
       } catch (error) {
@@ -113,18 +116,18 @@ export function useOfflineEmails(mailboxId: string | null) {
  */
 export function useOfflineSearch(query: string, enabled: boolean) {
   const userId = useCurrentUserId()
-  
+
   return useQuery({
     queryKey: ['search', 'offline', userId, query],
     queryFn: async () => {
       if (!userId || !query.trim()) return []
-      
+
       try {
         // Ensure sync manager is initialized for this user
         if (syncManager.getCurrentUserId() !== userId) {
           await syncManager.initializeUser(userId)
         }
-        
+
         return syncManager.searchOffline(query)
       } catch (error) {
         console.error('[IndexedDB] Search failed:', error)
@@ -145,46 +148,49 @@ export function useOfflineSearch(query: string, enabled: boolean) {
  */
 export function useOfflineEmailsInfinite(mailboxId: string | null) {
   const accountId = usePrimaryAccountId()
-  const session = useAuthStore(state => state.session)
+  const session = useAuthStore((state) => state.session)
   const userId = useCurrentUserId()
-  
+
   // Initialize sync manager with current user
   useEffect(() => {
     if (userId && accountId && session) {
-      syncManager.initializeUser(userId).then(() => {
-        syncManager.startPushSync(accountId)
-      }).catch(error => {
-        console.error('[IndexedDB] Failed to initialize user:', error)
-      })
-      
+      syncManager
+        .initializeUser(userId)
+        .then(() => {
+          syncManager.startPushSync(accountId)
+        })
+        .catch((error) => {
+          console.error('[IndexedDB] Failed to initialize user:', error)
+        })
+
       return () => syncManager.stop()
     }
   }, [userId, accountId, session])
-  
+
   return useQuery({
     queryKey: ['emails', 'infinite', userId, mailboxId],
     queryFn: async () => {
       if (!mailboxId || !accountId || !userId) {
         return { emails: [], hasMore: false, total: 0 }
       }
-      
+
       try {
         // Ensure sync manager is initialized for this user
         if (syncManager.getCurrentUserId() !== userId) {
           await syncManager.initializeUser(userId)
         }
-        
+
         // Get first batch from cache
         const emails = await syncManager.getMailboxEmails(mailboxId, 0, 50)
         const total = await db.emails
           .where('[_userId+_mailboxIds+receivedAt]')
           .between([userId, mailboxId, Dexie.minKey], [userId, mailboxId, Dexie.maxKey])
           .count()
-        
+
         return {
           emails,
           hasMore: emails.length < total,
-          total
+          total,
         }
       } catch (error) {
         console.error('[IndexedDB] Failed to fetch infinite emails:', error)
@@ -206,42 +212,37 @@ export function useOfflineEmailsInfinite(mailboxId: string | null) {
 export function useLoadMoreEmails() {
   const queryClient = useQueryClient()
   const userId = useCurrentUserId()
-  
+
   return useMutation({
-    mutationFn: async ({ 
-      mailboxId, 
-      offset 
-    }: { 
-      mailboxId: string
-      offset: number 
-    }) => {
+    mutationFn: async ({ mailboxId, offset }: { mailboxId: string; offset: number }) => {
       if (!userId) throw new Error('User not authenticated')
-      
+
       // Rate limiting check
       const now = Date.now()
-      const lastLoad = queryClient.getQueryData(['lastLoad', userId]) as number || 0
-      if (now - lastLoad < 1000) { // 1 second rate limit
+      const lastLoad = (queryClient.getQueryData(['lastLoad', userId]) as number) || 0
+      if (now - lastLoad < 1000) {
+        // 1 second rate limit
         throw new Error('Rate limit exceeded')
       }
       queryClient.setQueryData(['lastLoad', userId], now)
-      
+
       // Ensure sync manager is initialized for this user
       if (syncManager.getCurrentUserId() !== userId) {
         await syncManager.initializeUser(userId)
       }
-      
+
       return syncManager.getMailboxEmails(mailboxId, offset, 50)
     },
     onSuccess: (newEmails, { mailboxId }) => {
       // Update infinite query cache
       queryClient.setQueryData(['emails', 'infinite', userId, mailboxId], (old: any) => {
         if (!old) return { emails: newEmails, hasMore: newEmails.length === 50, total: 0 }
-        
+
         const allEmails = [...old.emails, ...newEmails]
         return {
           ...old,
           emails: allEmails,
-          hasMore: newEmails.length === 50
+          hasMore: newEmails.length === 50,
         }
       })
     },
@@ -258,17 +259,17 @@ export function useLoadMoreEmails() {
 export function useClearOfflineData() {
   const queryClient = useQueryClient()
   const userId = useCurrentUserId()
-  
+
   return useMutation({
     mutationFn: async () => {
       if (!userId) throw new Error('User not authenticated')
-      
+
       // Double-check user identity
       const currentUser = await db.getCurrentUser()
       if (currentUser !== userId) {
         throw new Error('User identity mismatch')
       }
-      
+
       await db.clearUserData(userId)
       syncManager.stop()
     },

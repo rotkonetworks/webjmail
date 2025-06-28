@@ -21,7 +21,7 @@ function formatDate(dateString: string): string {
   const now = new Date()
   const diff = now.getTime() - date.getTime()
   const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  
+
   if (days === 0) {
     // Today - show time
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -44,7 +44,7 @@ export function MessageItem({ email, isSelected, onClick }: MessageItemProps) {
   const isFlagged = email.keywords.$flagged
   const sender = email.from?.[0]
   const senderName = sender?.name || sender?.email || 'Unknown'
-  
+
   return (
     <div
       className={`
@@ -59,7 +59,7 @@ export function MessageItem({ email, isSelected, onClick }: MessageItemProps) {
       {isUnread && (
         <div className="absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
       )}
-      
+
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           {/* Sender and Time */}
@@ -67,22 +67,22 @@ export function MessageItem({ email, isSelected, onClick }: MessageItemProps) {
             <span className={`text-sm truncate ${isUnread ? 'text-gray-900' : 'text-gray-700'}`}>
               {senderName}
             </span>
-            <span className={`text-xs flex-shrink-0 ${isUnread ? 'text-primary' : 'text-gray-500'}`}>
+            <span
+              className={`text-xs flex-shrink-0 ${isUnread ? 'text-primary' : 'text-gray-500'}`}
+            >
               {formatDate(email.receivedAt)}
             </span>
           </div>
-          
+
           {/* Subject */}
           <div className={`text-sm mb-1 truncate ${isUnread ? 'text-gray-900' : 'text-gray-800'}`}>
             {email.subject || '(no subject)'}
           </div>
-          
+
           {/* Preview */}
-          <div className="text-sm text-gray-600 truncate">
-            {email.preview}
-          </div>
+          <div className="text-sm text-gray-600 truncate">{email.preview}</div>
         </div>
-        
+
         {/* Icons */}
         <div className="flex items-center gap-1 flex-shrink-0">
           {email.hasAttachment && (

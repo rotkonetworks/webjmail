@@ -40,9 +40,9 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           })
         } catch (error) {
-          set({ 
-            isAuthenticated: false, 
-            session: null, 
+          set({
+            isAuthenticated: false,
+            session: null,
             credentials: null,
             isLoading: false,
             error: error instanceof Error ? error.message : 'Login failed',
@@ -66,11 +66,7 @@ export const useAuthStore = create<AuthState>()(
         const { credentials } = get()
         if (credentials) {
           try {
-            await get().login(
-              credentials.server,
-              credentials.username,
-              credentials.password
-            )
+            await get().login(credentials.server, credentials.username, credentials.password)
           } catch (error) {
             console.error('Failed to restore session:', error)
             // Don't throw here, just log and continue
