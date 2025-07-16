@@ -1,3 +1,4 @@
+// src/api/jmap.ts
 import { JMAPSession, Email, Mailbox, Thread, JMAPRequest, JMAPResponse } from './types'
 
 export class JMAPClient {
@@ -220,11 +221,27 @@ export class JMAPClient {
     // Use proxy in development
     url = this.getProxiedUrl(url)
 
-    // Create EventSource without auth in URL
+    // For EventSource, we need to append auth token as query parameter
+    // since EventSource doesn't support custom headers
+    const authToken = this.accessToken.replace('Basic ', '')
+    const encodedToken = encodeURIComponent(authToken)
+    
+    // Check if URL already has query parameters
+    const separator = url.includes('?') ? '&' : '?'
+    url = `${url}${separator}authorization=Basic%20${encodedToken}`
+
+    console.log('[EventSource] Creating connection to:', url.split('?')[0])
+
     const eventSource = new EventSource(url)
 
-    // Note: EventSource does not support custom headers
-    // Server must use cookie-based auth or accept tokenless connections
+    // Add logging for debugging
+    eventSource.addEventListener('open', () => {
+      console.log('[EventSource] Connection opened')
+    })
+
+    eventSource.addEventListener('error', (event) => {
+      console.error('[EventSource] Connection error:', event)
+    })
 
     return eventSource
   }

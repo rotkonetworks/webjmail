@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+// src/components/Message/MessageView.tsx
+import React, { useState, useRef, useEffect } from 'react'
 import { useMailStore } from '../../stores/mailStore'
 import {
   useMarkAsRead,
@@ -6,192 +7,86 @@ import {
   useDeleteEmail,
   usePrimaryAccountId,
   useEmailThread,
-  useEmailDetails,
 } from '../../hooks/useJMAP'
 import { MessageComposer } from './MessageComposer'
 import DOMPurify from 'dompurify'
 import { format } from 'date-fns'
 import { jmapClient } from '../../api/jmap'
-import type { Email } from '../../api/types'
 
 interface MessageViewProps {
   onClose?: () => void
 }
 
-// Memoized components for performance
-const EmailAvatar = React.memo(({ sender, isCurrent }: { sender: any; isCurrent: boolean }) => {
-  const initial = (sender?.name || sender?.email || 'U').charAt(0).toUpperCase()
-  return (
-    <div
-      className={`
-        w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0
-        ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
-      `}
-    >
-      {initial}
-    </div>
-  )
-})
-
-const AttachmentButton = React.memo(({ attachment, onClick }: { attachment: any; onClick: () => void }) => {
-  const getIcon = (type: string) => {
-    if (type.startsWith('image/')) return 'i-lucide:image'
-    if (type.startsWith('video/')) return 'i-lucide:video'
-    if (type.includes('pdf')) return 'i-lucide:file-text'
-    if (type.includes('zip') || type.includes('archive')) return 'i-lucide:archive'
-    if (type.includes('sheet') || type.includes('excel')) return 'i-lucide:table'
-    if (type.includes('doc') || type.includes('word')) return 'i-lucide:file-text'
-    return 'i-lucide:file'
-  }
-
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB'
-    return Math.round((bytes / (1024 * 1024)) * 10) / 10 + ' MB'
-  }
-
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-3 p-4 bg-[var(--bg-tertiary)] rounded-lg hover:bg-white/10 text-left group"
-    >
-      <div
-        className={`${getIcon(attachment.type || '')} text-2xl text-[var(--text-secondary)] group-hover:text-[var(--primary-color)]`}
-      />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate text-[var(--text-primary)]">
-          {attachment.name || 'Untitled'}
-        </p>
-        <p className="text-xs text-[var(--text-tertiary)]">
-          {formatSize(attachment.size)}
-        </p>
-      </div>
-      <div className="i-lucide:download text-[var(--text-tertiary)] group-hover:text-[var(--primary-color)]" />
-    </button>
-  )
-})
-
 export function MessageView({ onClose }: MessageViewProps = {}) {
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
-  const selectEmail = useMailStore((state) => state.selectEmail)
+  const emails = useMailStore((state) => state.emails)
+  const email = selectedEmailId ? emails[selectedEmailId] : null
   const accountId = usePrimaryAccountId()
-  
-  // Fetch full email details
-  const { data: email, isLoading, error } = useEmailDetails(selectedEmailId)
-  
-  // Fetch thread emails
-  const { data: threadEmails } = useEmailThread(email?.threadId || null)
-  
-  // Mutations
+  const selectEmail = useMailStore((state) => state.selectEmail)
+
   const markAsRead = useMarkAsRead()
   const flagEmail = useFlagEmail()
   const deleteEmail = useDeleteEmail()
 
-  // Local state
   const [showComposer, setShowComposer] = useState(false)
   const [composerMode, setComposerMode] = useState<'reply' | 'replyAll' | 'forward'>('reply')
   const [expandedEmails, setExpandedEmails] = useState<Set<string>>(new Set())
 
-  // Refs
   const timelineRef = useRef<HTMLDivElement>(null)
   const emailRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  // Fetch thread emails
+  const { data: threadEmails } = useEmailThread(email?.threadId || null)
 
   // Mark as read
   useEffect(() => {
     if (email && !email.keywords.$seen && accountId) {
       markAsRead.mutate({ emailId: email.id, isRead: true })
     }
-  }, [email?.id, email?.keywords.$seen, accountId, markAsRead])
+  }, [email?.id])
 
   // Expand latest email by default
   useEffect(() => {
     if (email && threadEmails && threadEmails.length > 0) {
+      // Sort thread emails by receivedAt (newest first) and expand the newest one
       const sortedThreadEmails = [...threadEmails].sort(
         (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
       )
       const newestEmail = sortedThreadEmails[0]
-      
+
       setExpandedEmails(new Set([newestEmail.id]))
-      
-      // Use RAF for smoother scrolling
-      requestAnimationFrame(() => {
+      // Scroll to newest email after render
+      setTimeout(() => {
         const element = emailRefs.current.get(newestEmail.id)
-        element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      })
+        element?.scrollIntoView({ behavior: 'auto', block: 'start' })
+      }, 50)
     }
   }, [email?.id, threadEmails])
 
-  // Memoized email content renderer
-  const renderEmailContent = useCallback((email: Email) => {
-    const htmlBody = email.htmlBody?.[0]
-    const textBody = email.textBody?.[0]
-    
-    if (!htmlBody && !textBody) {
-      return <p className="text-[var(--text-tertiary)]">No content available</p>
-    }
-    
-    const bodyPart = htmlBody || textBody
-    const bodyValue = email.bodyValues?.[bodyPart!.partId]
-    
-    if (!bodyValue?.value) {
-      return <p className="text-[var(--text-tertiary)]">Loading content...</p>
-    }
+  if (!email || !accountId) return null
 
-    if (htmlBody) {
-      // Sanitize HTML with strict config
-      const sanitized = DOMPurify.sanitize(bodyValue.value, {
-        ALLOWED_TAGS: [
-          'p', 'br', 'div', 'span', 'a', 'b', 'i', 'em', 'strong', 'u',
-          'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-          'img', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'pre', 'code',
-        ],
-        ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'style', 'target'],
-        ALLOW_DATA_ATTR: false,
-        USE_PROFILES: { html: true },
-      })
-      
-      return (
-        <div
-          className="prose prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: sanitized }}
-        />
-      )
-    }
-
-    return (
-      <pre className="whitespace-pre-wrap font-sans text-[var(--text-primary)]">
-        {bodyValue.value}
-      </pre>
-    )
-  }, [])
-
-  // Callbacks
-  const handleReply = useCallback((mode: 'reply' | 'replyAll' | 'forward') => {
+  const handleReply = (mode: 'reply' | 'replyAll' | 'forward') => {
     setComposerMode(mode)
     setShowComposer(true)
-  }, [])
+  }
 
-  const handleDelete = useCallback(() => {
-    if (!email || !accountId) return
-    
+  const handleDelete = () => {
     if (confirm('Delete this message?')) {
       deleteEmail.mutate({ accountId, emailId: email.id })
       selectEmail(null)
       onClose?.()
     }
-  }, [email, accountId, deleteEmail, selectEmail, onClose])
+  }
 
-  const handleFlag = useCallback(() => {
-    if (!email || !accountId) return
-    
+  const handleFlag = () => {
     flagEmail.mutate({
       accountId,
       emailId: email.id,
       isFlagged: !email.keywords.$flagged,
     })
-  }, [email, accountId, flagEmail])
+  }
 
-  const toggleEmailExpansion = useCallback((emailId: string) => {
+  const toggleEmailExpansion = (emailId: string) => {
     setExpandedEmails((prev) => {
       const next = new Set(prev)
       if (next.has(emailId)) {
@@ -201,9 +96,14 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
       }
       return next
     })
-  }, [])
+  }
 
-  const handleDownloadAttachment = useCallback((attachment: any) => {
+  const scrollToEmail = (emailId: string) => {
+    const element = emailRefs.current.get(emailId)
+    element?.scrollIntoView({ behavior: 'auto', block: 'start' })
+  }
+
+  const handleDownloadAttachment = (attachment: any) => {
     if (!accountId || !attachment.blobId) return
 
     const url = jmapClient.getBlobUrl(
@@ -213,73 +113,104 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
       attachment.name || 'attachment'
     )
 
-    // Use fetch to handle auth properly
-    fetch(url, {
-      headers: {
-        'Authorization': jmapClient['accessToken'] || '',
-      },
-    })
-      .then(res => res.blob())
-      .then(blob => {
-        const objectUrl = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = objectUrl
-        link.download = attachment.name || 'attachment'
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(objectUrl)
-      })
-      .catch(err => {
-        console.error('Download failed:', err)
-        // Fallback to direct download
-        window.open(url, '_blank')
-      })
-  }, [accountId])
+    // Create download link with auth header
+    const link = document.createElement('a')
+    link.href = url
+    link.download = attachment.name || 'attachment'
+    link.target = '_blank'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
-  // Memoized display emails
-  const displayEmails = useMemo(() => {
-    if (!email) return []
-    return (threadEmails || [email]).sort(
-      (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-    )
-  }, [email, threadEmails])
+  const getAttachmentIcon = (type: string) => {
+    if (type.startsWith('image/')) return 'i-lucide:image'
+    if (type.startsWith('video/')) return 'i-lucide:video'
+    if (type.includes('pdf')) return 'i-lucide:file-text'
+    if (type.includes('zip') || type.includes('archive')) return 'i-lucide:archive'
+    if (type.includes('sheet') || type.includes('excel')) return 'i-lucide:table'
+    if (type.includes('doc') || type.includes('word')) return 'i-lucide:file-text'
+    return 'i-lucide:file'
+  }
 
-  // Loading state
-  if (isLoading) {
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB'
+    return Math.round((bytes / (1024 * 1024)) * 10) / 10 + ' MB'
+  }
+
+  const renderEmailContent = (email: any) => {
+    const htmlBody = email.htmlBody?.[0]
+    const textBody = email.textBody?.[0]
+    const bodyValue = htmlBody
+      ? email.bodyValues[htmlBody.partId]
+      : textBody
+        ? email.bodyValues[textBody.partId]
+        : null
+
+    if (!bodyValue) return null
+
+    if (htmlBody) {
+      return (
+        <div
+          className="prose prose-invert max-w-none"
+          dangerouslySetInnerHTML={{
+            __html: DOMPurify.sanitize(bodyValue.value, {
+              ALLOWED_TAGS: [
+                'p',
+                'br',
+                'div',
+                'span',
+                'a',
+                'b',
+                'i',
+                'em',
+                'strong',
+                'u',
+                'ul',
+                'ol',
+                'li',
+                'blockquote',
+                'h1',
+                'h2',
+                'h3',
+                'h4',
+                'h5',
+                'h6',
+                'img',
+                'table',
+                'tr',
+                'td',
+                'th',
+                'thead',
+                'tbody',
+                'pre',
+                'code',
+              ],
+              ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'style', 'target'],
+            }),
+          }}
+        />
+      )
+    }
+
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="animate-spin i-eos-icons:loading text-2xl text-[var(--text-tertiary)]" />
-      </div>
+      <pre className="whitespace-pre-wrap font-sans text-[var(--text-primary)]">
+        {bodyValue.value}
+      </pre>
     )
   }
 
-  // Error state
-  if (error) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <div className="i-lucide:alert-circle text-4xl text-red-500 mb-2" />
-          <p className="text-[var(--text-secondary)]">Failed to load email</p>
-          <button
-            onClick={() => selectEmail(null)}
-            className="mt-4 px-4 py-2 bg-[var(--bg-tertiary)] rounded-lg hover:bg-white/10"
-          >
-            Go back
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // No email selected
-  if (!email || !accountId) {
-    return null
-  }
+  // Use thread emails if available, otherwise just the current email
+  // Sort emails by receivedAt (newest first)
+  const displayEmails = (threadEmails || [email]).sort(
+    (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+  )
 
   return (
     <>
       <div className="h-full flex">
+        {/* Main content */}
         <div className="flex-1 flex flex-col">
           {/* Action bar */}
           <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)]">
@@ -290,7 +221,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                   onClose?.()
                 }}
                 className="p-2 hover:bg-white/10 rounded-lg"
-                title="Back (Esc)"
+                title="Back"
               >
                 <div className="i-lucide:arrow-left" />
               </button>
@@ -310,21 +241,21 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
               <button
                 onClick={() => handleReply('reply')}
                 className="p-2 hover:bg-white/10 rounded-lg"
-                title="Reply (R)"
+                title="Reply"
               >
                 <div className="i-lucide:reply" />
               </button>
               <button
                 onClick={() => handleReply('replyAll')}
                 className="p-2 hover:bg-white/10 rounded-lg"
-                title="Reply All (A)"
+                title="Reply All"
               >
                 <div className="i-lucide:reply-all" />
               </button>
               <button
                 onClick={() => handleReply('forward')}
                 className="p-2 hover:bg-white/10 rounded-lg"
-                title="Forward (F)"
+                title="Forward"
               >
                 <div className="i-lucide:forward" />
               </button>
@@ -332,7 +263,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
               <button
                 onClick={handleFlag}
                 className="p-2 hover:bg-white/10 rounded-lg"
-                title={email.keywords.$flagged ? 'Unflag (S)' : 'Flag (S)'}
+                title={email.keywords.$flagged ? 'Unflag' : 'Flag'}
               >
                 <div
                   className={`${email.keywords.$flagged ? 'i-lucide:star-fill text-[var(--accent-pink)]' : 'i-lucide:star'}`}
@@ -341,7 +272,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
               <button
                 onClick={handleDelete}
                 className="p-2 hover:bg-white/10 rounded-lg"
-                title="Delete (D)"
+                title="Delete"
               >
                 <div className="i-lucide:trash-2" />
               </button>
@@ -355,15 +286,12 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                 const isExpanded = expandedEmails.has(threadEmail.id)
                 const isCurrent = threadEmail.id === email.id
                 const sender = threadEmail.from?.[0]
-                const isLatest = index === 0
+                const isLatest = index === displayEmails.length - 1
 
                 return (
                   <div
                     key={threadEmail.id}
-                    ref={(el) => {
-                      if (el) emailRefs.current.set(threadEmail.id, el)
-                      else emailRefs.current.delete(threadEmail.id)
-                    }}
+                    ref={(el) => el && emailRefs.current.set(threadEmail.id, el)}
                     className={`timeline-marker mb-6 ${isLatest ? 'slide-in' : ''}`}
                   >
                     {/* Email header */}
@@ -371,24 +299,30 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                       onClick={() => toggleEmailExpansion(threadEmail.id)}
                       className={`
                         bg-[var(--bg-secondary)] rounded-lg p-4 cursor-pointer 
-                        hover:bg-[var(--bg-tertiary)] transition-colors
+                        hover:bg-[var(--bg-tertiary)]
                         ${isCurrent ? 'ring-2 ring-[var(--primary-color)]' : ''}
                       `}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
-                          <EmailAvatar sender={sender} isCurrent={isCurrent} />
-                          
+                          {/* Avatar */}
+                          <div
+                            className={`
+                            w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0
+                            ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
+                          `}
+                          >
+                            {(sender?.name || sender?.email || 'U').charAt(0).toUpperCase()}
+                          </div>
+
                           {/* Sender info */}
                           <div>
                             <div className="font-medium text-[var(--text-primary)]">
                               {sender?.name || sender?.email || 'Unknown'}
                             </div>
-                            {sender?.email && (
-                              <div className="text-sm text-[var(--text-tertiary)]">
-                                {sender.email}
-                              </div>
-                            )}
+                            <div className="text-sm text-[var(--text-tertiary)]">
+                              {sender?.email}
+                            </div>
                           </div>
                         </div>
 
@@ -398,13 +332,13 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                             {format(new Date(threadEmail.receivedAt), 'MMM d, yyyy at HH:mm')}
                           </span>
                           <div
-                            className={`i-lucide:chevron-down transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                            className={`i-lucide:chevron-down ${isExpanded ? 'rotate-180' : ''}`}
                           />
                         </div>
                       </div>
 
                       {/* Preview when collapsed */}
-                      {!isExpanded && threadEmail.preview && (
+                      {!isExpanded && (
                         <p className="mt-2 text-sm text-[var(--text-tertiary)] truncate">
                           {threadEmail.preview}
                         </p>
@@ -415,7 +349,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                     {isExpanded && (
                       <div className="mt-4 bg-[var(--bg-secondary)] rounded-lg p-6">
                         {/* Recipients info */}
-                        {(threadEmail.to?.length || threadEmail.cc?.length) && (
+                        {(threadEmail.to || threadEmail.cc) && (
                           <div className="mb-4 text-sm text-[var(--text-tertiary)] space-y-1">
                             {threadEmail.to && threadEmail.to.length > 0 && (
                               <div>
@@ -444,11 +378,24 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                             </h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               {threadEmail.attachments.map((attachment: any) => (
-                                <AttachmentButton
+                                <button
                                   key={attachment.partId}
-                                  attachment={attachment}
                                   onClick={() => handleDownloadAttachment(attachment)}
-                                />
+                                  className="flex items-center gap-3 p-4 bg-[var(--bg-tertiary)] rounded-lg hover:bg-white/10 text-left group"
+                                >
+                                  <div
+                                    className={`${getAttachmentIcon(attachment.type || '')} text-2xl text-[var(--text-secondary)] group-hover:text-[var(--primary-color)]`}
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate text-[var(--text-primary)]">
+                                      {attachment.name || 'Untitled'}
+                                    </p>
+                                    <p className="text-xs text-[var(--text-tertiary)]">
+                                      {formatFileSize(attachment.size)}
+                                    </p>
+                                  </div>
+                                  <div className="i-lucide:download text-[var(--text-tertiary)] group-hover:text-[var(--primary-color)]" />
+                                </button>
                               ))}
                             </div>
                           </div>
@@ -467,6 +414,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
           <div className="w-16 bg-[var(--bg-secondary)] border-l border-[var(--border-color)] p-2">
             <div className="text-xs text-[var(--text-tertiary)] text-center mb-2">Timeline</div>
             <div className="relative h-full">
+              {/* Create chronological timeline (oldest to newest) for visual clarity */}
               {[...displayEmails]
                 .sort((a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime())
                 .map((threadEmail, index, chronologicalEmails) => {
@@ -477,21 +425,18 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                   return (
                     <button
                       key={threadEmail.id}
-                      onClick={() => {
-                        const element = emailRefs.current.get(threadEmail.id)
-                        element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                      }}
+                      onClick={() => scrollToEmail(threadEmail.id)}
                       className="absolute left-1/2 -translate-x-1/2 group"
                       style={{ top: `${position}%` }}
                       title={format(date, 'MMM d, HH:mm')}
                     >
                       <div
                         className={`
-                          w-3 h-3 rounded-full group-hover:scale-110 transition-transform
-                          ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
-                        `}
+                      w-3 h-3 rounded-full group-hover:scale-110
+                      ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
+                    `}
                       />
-                      <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 whitespace-nowrap text-xs bg-black/80 px-2 py-1 rounded pointer-events-none">
+                      <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 whitespace-nowrap text-xs bg-black/80 px-2 py-1 rounded">
                         {format(date, 'MMM d')}
                       </div>
                     </button>

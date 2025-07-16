@@ -1,3 +1,4 @@
+// src/stores/authStore.ts
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { jmapClient } from '../api/jmap'
@@ -52,6 +53,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // Don't clear IndexedDB on logout - only clear auth state
         set({
           isAuthenticated: false,
           session: null,
@@ -82,3 +84,4 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+

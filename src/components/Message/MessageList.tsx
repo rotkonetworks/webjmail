@@ -1,6 +1,7 @@
+// src/components/Message/MessageList.tsx
 import React, { useMemo, useEffect, useRef, useState } from 'react'
-import { useEmailSearch } from '../../hooks/useJMAP'
-import { useOfflineEmails, useOfflineSearch, useLoadMoreEmails } from '../../hooks/useIndexedDB'
+import { useEmails, useEmailSearch } from '../../hooks/useJMAP'
+import { useOfflineEmails, useOfflineSearch } from '../../hooks/useIndexedDB'
 import { useMailStore } from '../../stores/mailStore'
 import { format, isToday, isYesterday } from 'date-fns'
 import DOMPurify from 'dompurify'
@@ -15,11 +16,17 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
 
   // Use offline-first email loading
-  const { data: offlineData, isLoading, refetch, loadMore } = useOfflineEmails(selectedMailboxId)
+  const { data: offlineData, isLoading, refetch } = useOfflineEmails(selectedMailboxId)
 
-  // Get loading state for infinite scroll
-  const loadMoreMutation = useLoadMoreEmails()
-  const isFetchingNextPage = loadMoreMutation.isPending
+  // Fallback to online for infinite scroll if needed
+  const {
+    emails: onlineEmails,
+    isFetchingNextPage,
+    hasMore,
+    total: onlineTotal,
+    fetchNextPage,
+    refetch: refetchOnline,
+  } = useEmails(selectedMailboxId)
 
   const [searchDebounce, setSearchDebounce] = useState('')
   const [showServerSearch, setShowServerSearch] = useState(false)
@@ -49,8 +56,9 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     if (!offlineData?.emails?.length && selectedMailboxId && !isLoading) {
       console.log('[MessageList] No offline data, fetching from server')
       refetch()
+      fetchNextPage()
     }
-  }, [selectedMailboxId, offlineData, isLoading, refetch])
+  }, [selectedMailboxId, offlineData, isLoading, refetch, fetchNextPage])
 
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
@@ -59,16 +67,20 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
 
   // Intersection observer for infinite scroll with improved cleanup
   useEffect(() => {
-    if (!loadMoreRef.current || !offlineData?.hasMore || showServerSearch) return
+    if (!loadMoreRef.current || !hasMore || showServerSearch || isFetchingNextPage) return
 
     const element = loadMoreRef.current
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !isFetchingNextPage) {
-          loadMoreMutation.mutate({ mailboxId: selectedMailboxId!, offset: offlineData?.emails?.length || 0 })
+        if (entries[0].isIntersecting && !isFetchingNextPage && hasMore) {
+          console.log('[MessageList] Triggering fetchNextPage')
+          fetchNextPage()
         }
       },
-      { threshold: 0.1, rootMargin: '50px' }
+      { 
+        threshold: 0.1, 
+        rootMargin: '100px' // Load more when within 100px of the bottom
+      }
     )
 
     observer.observe(element)
@@ -76,7 +88,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     return () => {
       observer.disconnect()
     }
-  }, [offlineData?.hasMore, offlineData?.emails?.length, isFetchingNextPage, loadMoreMutation, selectedMailboxId, showServerSearch])
+  }, [hasMore, isFetchingNextPage, fetchNextPage, showServerSearch])
 
   // Handle Enter key
   useEffect(() => {
@@ -95,10 +107,9 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
   }, [selectedEmailId, onSelectEmail])
 
   // Determine data source with offline-first approach
-  const emails = offlineData?.emails || []
-  const total = offlineData?.total || 0
+  const emails = offlineData?.emails || onlineEmails || []
+  const total = offlineData?.total || onlineTotal || 0
   const fromCache = offlineData?.fromCache || false
-  const hasMore = offlineData?.hasMore || false
 
   // Filter emails with offline-first search
   const filteredEmails = useMemo(() => {
@@ -264,7 +275,10 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
           <button
             className="p-1 hover:bg-white/10 rounded"
             title="Refresh"
-            onClick={() => refetch()}
+            onClick={() => {
+              refetch()
+              refetchOnline()
+            }}
           >
             <div className="i-lucide:refresh-cw text-sm" />
           </button>
@@ -315,8 +329,8 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                   </span>
                   <span
                     className={`
-                    ${viewMode === 'row' ? 'text-sm' : 'text-xs'} 
-                    text-[var(--text-tertiary)] flex-shrink-0
+                    ${viewMode === 'row' ? 'text-sm' : 'text-xs'}
+                     text-[var(--text-tertiary)] flex-shrink-0
                   `}
                   >
                     {formatEmailDate(email.receivedAt)}
@@ -388,7 +402,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       })}
 
       {/* Load more */}
-      {!showServerSearch && (
+      {!showServerSearch && emails.length > 0 && (
         <div ref={loadMoreRef} className="p-4 text-center">
           {hasMore ? (
             isFetchingNextPage ? (
@@ -398,16 +412,17 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
               </div>
             ) : (
               <button
-                onClick={() => loadMoreMutation.mutate({ mailboxId: selectedMailboxId!, offset: emails.length })}
+                onClick={() => fetchNextPage()}
                 className="text-sm text-[var(--primary-color)] hover:underline"
+                disabled={isFetchingNextPage}
               >
                 Load more
               </button>
             )
-          ) : filteredEmails.length > 0 && total > 0 && filteredEmails.length >= total ? (
+          ) : emails.length > 0 && total > 0 ? (
             <div className="flex items-center justify-center gap-2 text-[var(--text-tertiary)]">
               <div className="i-lucide:check-circle text-sm" />
-              <span className="text-sm">All messages loaded ({total} total)</span>
+              <span className="text-sm">All {total} messages loaded</span>
             </div>
           ) : null}
         </div>

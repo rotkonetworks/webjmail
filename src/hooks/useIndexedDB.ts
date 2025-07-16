@@ -1,3 +1,4 @@
+// src/hooks/useIndexedDB.ts
 import { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Dexie from 'dexie'
@@ -6,13 +7,6 @@ import { syncManager } from '../db/sync'
 import { useAuthStore } from '../stores/authStore'
 import { usePrimaryAccountId } from './useJMAP'
 
-/**
- * Get user ID from session for database operations
- * Issue: User identification and session validation
- * Line: src/hooks/useIndexedDB.ts:11
- * Attack: Must ensure proper user identification for data isolation
- * Fix: Use hash-based user ID and validate session
- */
 function useCurrentUserId(): string | null {
   const session = useAuthStore((state) => state.session)
 
@@ -34,18 +28,10 @@ function useCurrentUserId(): string | null {
   return `user_${Math.abs(hash).toString(36)}`
 }
 
-/**
- * Offline-first emails with multi-user support
- * Issue: Data isolation and sync security
- * Line: src/hooks/useIndexedDB.ts:23
- * Attack: Users could access other users' data without proper isolation
- * Fix: Initialize sync manager with user ID and validate all operations
- */
 export function useOfflineEmails(mailboxId: string | null) {
   const accountId = usePrimaryAccountId()
   const session = useAuthStore((state) => state.session)
   const userId = useCurrentUserId()
-  const loadMore = useLoadMoreEmails()
 
   // Initialize sync manager with current user
   useEffect(() => {
@@ -53,10 +39,7 @@ export function useOfflineEmails(mailboxId: string | null) {
       syncManager
         .initializeUser(userId)
         .then(() => {
-        try {           syncManager.startPushSync(accountId)
-        } catch (error) {
-          console.warn("[IndexedDB] Push sync not available:", error)
-        }
+          syncManager.startPushSync(accountId)
         })
         .catch((error) => {
           console.error('[IndexedDB] Failed to initialize user:', error)
@@ -66,11 +49,11 @@ export function useOfflineEmails(mailboxId: string | null) {
     }
   }, [userId, accountId, session])
 
-  const query = useQuery({
+  return useQuery({
     queryKey: ['emails', 'offline', userId, mailboxId],
     queryFn: async () => {
       if (!mailboxId || !accountId || !userId) {
-        return { emails: [], total: 0, fromCache: false, hasMore: false }
+        return { emails: [], total: 0, fromCache: false }
       }
 
       try {
@@ -79,54 +62,41 @@ export function useOfflineEmails(mailboxId: string | null) {
           await syncManager.initializeUser(userId)
         }
 
-        // Try offline first
+        // Always try to get cached emails first
         const cachedEmails = await syncManager.getMailboxEmails(mailboxId, 0, 50)
+        const cachedTotal = await db.emails
+          .where('[_userId+_mailboxIds+receivedAt]')
+          .between([userId, mailboxId, Dexie.minKey], [userId, mailboxId, Dexie.maxKey])
+          .count()
 
+        // Return cached data immediately if available
         if (cachedEmails.length > 0) {
-          // Return cached data immediately
-          const total = await db.emails
-            .where('[_userId+_mailboxIds+receivedAt]')
-            .between([userId, mailboxId, Dexie.minKey], [userId, mailboxId, Dexie.maxKey])
-            .count()
-
+          // Trigger background sync to update cache
+          syncManager.syncMailbox(accountId, mailboxId).catch(console.error)
+          
           return {
             emails: cachedEmails,
-            total,
+            total: cachedTotal,
             fromCache: true,
-            hasMore: cachedEmails.length < total,
           }
         }
 
         // If no cache, sync from server
-        const result = await syncManager.syncMailbox(accountId, mailboxId)
-        return { ...result, hasMore: result.emails.length < result.total }
+        return syncManager.syncMailbox(accountId, mailboxId)
       } catch (error) {
         console.error('[IndexedDB] Failed to fetch emails:', error)
-        return { emails: [], total: 0, fromCache: false, hasMore: false }
+        return { emails: [], total: 0, fromCache: false }
       }
     },
     enabled: !!session && !!accountId && !!mailboxId && !!userId,
-    staleTime: 30 * 1000, // Consider data fresh for 30s
-    // Background refetch will update IndexedDB
-    refetchInterval: 5 * 60 * 1000, // Every 5 minutes
+    staleTime: 60 * 1000, // Consider data fresh for 60s
+    refetchInterval: 60 * 1000, // Check every 60 seconds instead of 30
     refetchIntervalInBackground: true,
+    refetchOnMount: false, // Don't refetch on mount if we have cache
+    refetchOnReconnect: true,
   })
-
-  return {
-    data: query.data,
-    isLoading: query.isLoading,
-    refetch: query.refetch,
-    loadMore,
-  }
 }
 
-/**
- * Offline search with user isolation
- * Issue: Search query validation and user isolation
- * Line: src/hooks/useIndexedDB.ts:75
- * Attack: Search queries could be used for injection or to access other users' data
- * Fix: Sanitize queries and enforce user boundaries
- */
 export function useOfflineSearch(query: string, enabled: boolean) {
   const userId = useCurrentUserId()
 
@@ -152,13 +122,6 @@ export function useOfflineSearch(query: string, enabled: boolean) {
   })
 }
 
-/**
- * Infinite scroll for offline emails
- * Issue: Memory management and user isolation
- * Line: src/hooks/useIndexedDB.ts:103
- * Attack: Could exhaust memory with large datasets
- * Fix: Implement proper pagination and memory cleanup
- */
 export function useOfflineEmailsInfinite(mailboxId: string | null) {
   const accountId = usePrimaryAccountId()
   const session = useAuthStore((state) => state.session)
@@ -170,10 +133,7 @@ export function useOfflineEmailsInfinite(mailboxId: string | null) {
       syncManager
         .initializeUser(userId)
         .then(() => {
-        try {           syncManager.startPushSync(accountId)
-        } catch (error) {
-          console.warn("[IndexedDB] Push sync not available:", error)
-        }
+          syncManager.startPushSync(accountId)
         })
         .catch((error) => {
           console.error('[IndexedDB] Failed to initialize user:', error)
@@ -218,22 +178,13 @@ export function useOfflineEmailsInfinite(mailboxId: string | null) {
   })
 }
 
-/**
- * Load more emails for infinite scroll
- * Issue: Rate limiting and user validation
- * Line: src/hooks/useIndexedDB.ts:153
- * Attack: Could be abused to exhaust resources
- * Fix: Rate limit and validate user context
- */
 export function useLoadMoreEmails() {
   const queryClient = useQueryClient()
   const userId = useCurrentUserId()
-  const accountId = usePrimaryAccountId()
 
   return useMutation({
     mutationFn: async ({ mailboxId, offset }: { mailboxId: string; offset: number }) => {
       if (!userId) throw new Error('User not authenticated')
-      if (!accountId) throw new Error('No account ID')
 
       // Rate limiting check
       const now = Date.now()
@@ -249,38 +200,24 @@ export function useLoadMoreEmails() {
         await syncManager.initializeUser(userId)
       }
 
-      // Sync next batch from server
-      const result = await syncManager.syncMailbox(accountId, mailboxId, offset)
-      return result.emails
+      return syncManager.getMailboxEmails(mailboxId, offset, 50)
     },
     onSuccess: (newEmails, { mailboxId }) => {
-      // Update the offline query cache
-      queryClient.setQueryData(['emails', 'offline', userId, mailboxId], (old: any) => {
-        if (!old) return { emails: newEmails, hasMore: newEmails.length === 50, total: 0, fromCache: false }
+      // Update infinite query cache
+      queryClient.setQueryData(['emails', 'infinite', userId, mailboxId], (old: any) => {
+        if (!old) return { emails: newEmails, hasMore: newEmails.length === 50, total: 0 }
 
-        // Deduplicate emails by ID
-        const existingIds = new Set(old.emails.map((e: any) => e.id))
-        const uniqueNewEmails = newEmails.filter((e: any) => !existingIds.has(e.id))
-        const allEmails = [...old.emails, ...uniqueNewEmails]
-        
+        const allEmails = [...old.emails, ...newEmails]
         return {
           ...old,
           emails: allEmails,
           hasMore: newEmails.length === 50,
-          total: Math.max(old.total, allEmails.length),
         }
       })
     },
   })
 }
 
-/**
- * Clear offline data for current user
- * Issue: Data cleanup and user validation
- * Line: src/hooks/useIndexedDB.ts:195
- * Attack: Could be used to delete other users' data
- * Fix: Strictly validate user identity before cleanup
- */
 export function useClearOfflineData() {
   const queryClient = useQueryClient()
   const userId = useCurrentUserId()

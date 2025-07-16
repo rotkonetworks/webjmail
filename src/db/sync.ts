@@ -1,3 +1,4 @@
+// src/db/sync.ts
 import Dexie from 'dexie'
 import { db, type CachedEmail } from './index'
 import { jmapClient } from '../api/jmap'
@@ -8,51 +9,41 @@ export class SyncManager {
   private eventSource: EventSource | null = null
   private currentUserId: string | null = null
 
-  /**
-   * Initialize sync for a specific user
-   * Issue: User session validation
-   * Line: src/db/sync.ts:15
-   * Attack: Must validate user before starting sync
-   * Fix: Authenticate user ID and update activity
-   */
   async initializeUser(userId: string) {
-    if (this.currentUserId === userId) return;
     // Validate user ID to prevent injection attacks
     if (!userId || typeof userId !== 'string' || userId.length === 0) {
-      console.error("[Sync] Invalid user ID"); return
+      throw new Error('Invalid user ID')
     }
 
     // Sanitize user ID - only allow safe characters
     const sanitizedUserId = userId.replace(/[^a-zA-Z0-9._@-]/g, '')
     if (sanitizedUserId !== userId) {
-      console.error("[Sync] User ID contains invalid characters"); return
+      throw new Error('User ID contains invalid characters')
     }
 
     // Limit user ID length to prevent DoS
     if (userId.length > 255) {
-      console.error("[Sync] User ID too long"); return
+      throw new Error('User ID too long')
+    }
+
+    // Limit user ID length to prevent DoS
+    if (userId.length > 255) {
+      throw new Error('User ID too long')
     }
 
     this.currentUserId = userId
     await db.updateUserActivity(userId)
   }
 
-  /**
-   * Initial sync with cache-first strategy
-   * Issue: Race conditions in cache/network
-   * Line: src/db/sync.ts:26
-   * Attack: Cache poisoning if sync order is wrong
-   * Fix: Use proper locking and validate data integrity
-   */
   async initialSync(accountId: string, mailboxId: string) {
     if (!this.currentUserId) {
-      console.warn("[Sync] Cannot start push sync - user not initialized"); return
+      throw new Error('User not initialized')
     }
 
     const syncStateId = `user:${this.currentUserId}:mailbox:${mailboxId}`
     const existingState = await db.syncStates.get(syncStateId)
 
-    // Always check cached data first
+    // Check if we have cached data
     const cachedCount = await db.emails
       .where('[_userId+_mailboxIds+receivedAt]')
       .between(
@@ -61,46 +52,26 @@ export class SyncManager {
       )
       .count()
 
-    // If we have recent data (less than 5 minutes old), use it
-    if (cachedCount > 0 && existingState && (Date.now() - existingState.lastSync < 5 * 60 * 1000)) {
-      console.log('[Sync] Using cached data for', mailboxId, 'count:', cachedCount)
+    if (cachedCount > 0 && existingState) {
       // Return cached data immediately
-      const emails = await this.getMailboxEmails(mailboxId, 0, 50)
       return {
         fromCache: true,
-        emails,
-        total: cachedCount,
+        emails: await this.getMailboxEmails(mailboxId, 0, 50),
       }
     }
 
-    console.log('[Sync] Cache miss or stale, syncing from server for', mailboxId)
     // Perform fresh sync
     return this.syncMailbox(accountId, mailboxId)
   }
 
-  /**
-   * Sync mailbox with server
-   * Issue: Data validation and sanitization
-   * Line: src/db/sync.ts:52
-   * Attack: Malicious data from server could corrupt local storage
-   * Fix: Validate all fields before storing
-   */
   async syncMailbox(accountId: string, mailboxId: string, position = 0) {
     if (!this.currentUserId) {
-      console.warn("[Sync] Cannot start push sync - user not initialized"); return
+      throw new Error('User not initialized')
     }
 
     const syncStateId = `user:${this.currentUserId}:mailbox:${mailboxId}`
     const syncState = await db.syncStates.get(syncStateId)
 
-    // Check if we already have this data range cached
-    if (syncState && position > 0 && position <= syncState.position) {
-      console.log('[Sync] Already have data up to position', position)
-      const emails = await this.getMailboxEmails(mailboxId, position, 50)
-      return { emails, total: syncState.position, fromCache: true }
-    }
-
-    console.log('[Sync] Fetching from server:', mailboxId, 'position:', position)
     const {
       emails,
       total,
@@ -116,7 +87,7 @@ export class SyncManager {
 
       // CRITICAL: Ensure user ID is always set for security isolation
       if (!this.currentUserId) {
-        console.error("[Sync] Cannot sync emails without valid user context"); return [] as CachedEmail[]
+        throw new Error('Cannot sync emails without valid user context')
       }
 
       // Sanitize email content to prevent XSS
@@ -130,37 +101,26 @@ export class SyncManager {
         _userId: this.currentUserId, // REQUIRED field for security
         preview: sanitizedPreview,
         subject: sanitizedSubject,
-      } as CachedEmail
+      }
     })
 
     await db.transaction('rw', db.emails, db.syncStates, async () => {
-      // Use put to update existing emails
-      for (const email of cachedEmails) {
-        await db.emails.put(email)
-      }
+      await db.emails.bulkPut(cachedEmails)
       await db.syncStates.put({
         id: syncStateId,
         state: '', // Would come from JMAP response
-        lastSync: Date.now(), 
-        position: Math.max(syncState?.position || 0, newPosition),
+        lastSync: Date.now(),
+        position: newPosition,
         userId: this.currentUserId!,
       })
     })
 
-    console.log('[Sync] Stored', cachedEmails.length, 'emails in IndexedDB')
     return { emails: cachedEmails, total, fromCache: false }
   }
 
-  /**
-   * Get cached emails with user isolation
-   * Issue: User data isolation
-   * Line: src/db/sync.ts:98
-   * Attack: Without proper filtering, users could see other users' emails
-   * Fix: Always filter by current user ID
-   */
   async getMailboxEmails(mailboxId: string, offset: number, limit: number) {
     if (!this.currentUserId) {
-      console.warn("[Sync] Cannot start push sync - user not initialized"); return
+      throw new Error('User not initialized')
     }
 
     return db.emails
@@ -175,16 +135,9 @@ export class SyncManager {
       .toArray()
   }
 
-  /**
-   * Offline search with user isolation
-   * Issue: Search injection and user isolation
-   * Line: src/db/sync.ts:116
-   * Attack: Search queries could leak data or cause injection
-   * Fix: Sanitize queries and enforce user boundaries
-   */
   async searchOffline(query: string, mailboxId?: string): Promise<Email[]> {
     if (!this.currentUserId) {
-      console.warn("[Sync] Cannot start push sync - user not initialized"); return
+      throw new Error('User not initialized')
     }
 
     // Sanitize search query
@@ -214,138 +167,127 @@ export class SyncManager {
     return results
   }
 
-  /**
-   * Start real-time push sync
-   * Issue: EventSource security and resource management
-   * Line: src/db/sync.ts:145
-   * Attack: EventSource could be used for DoS or consume excessive resources
-   * Fix: Implement proper cleanup and rate limiting
-   */
-  startPushSync(accountId: string) {
-    return; // EventSource disabled temporarily
-    if (this.eventSource) return
-    if (!this.currentUserId) {
-      console.warn("[Sync] Cannot start push sync - user not initialized"); return
-    }
+ startPushSync(accountId: string) {
+   if (this.eventSource) return
+   if (!this.currentUserId) {
+     throw new Error('User not initialized')
+   }
 
-    try {
-    this.eventSource = jmapClient.createEventSource(['Email', 'Mailbox'])
-    } catch (error) {
-      console.warn("[Sync] EventSource not available:", error);
-      return;
-    }
+   let reconnectAttempts = 0
+   const maxReconnectAttempts = 5
+   const reconnectDelay = 5000
 
-    this.eventSource.addEventListener('state', async (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        if (data.changed[accountId]?.Email) {
-          await this.handleEmailChanges(accountId, data.changed[accountId].Email)
-        }
-      } catch (error) {
-        console.error('[Sync] Failed to process push event:', error)
-        // Don't let one bad event kill the entire sync
-      }
-    })
+   const connect = () => {
+     try {
+       this.eventSource = jmapClient.createEventSource(['Email', 'Mailbox'])
 
-    this.eventSource.addEventListener('error', (event) => {
-      console.error('[Sync] EventSource error:', event)
-      // Reconnect after a delay
-      setTimeout(() => {
-        this.stop()
-        this.startPushSync(accountId)
-      }, 5000)
-    })
-  }
+       this.eventSource.addEventListener('open', () => {
+         console.log('[Sync] Push connection established')
+         reconnectAttempts = 0 // Reset attempts on successful connection
+       })
 
-  /**
-   * Handle email changes from push notifications
-   * Issue: Change validation and rate limiting
-   * Line: src/db/sync.ts:176
-   * Attack: Rapid changes could overwhelm the system
-   * Fix: Rate limit and validate changes
-   */
-  private async handleEmailChanges(accountId: string, newState: string) {
-    if (!this.currentUserId) return
+       this.eventSource.addEventListener('state', async (event) => {
+         try {
+           const data = JSON.parse(event.data)
+           if (data.changed?.[accountId]?.Email) {
+             console.log('[Sync] Email state changed:', data.changed[accountId].Email)
+             await this.handleEmailChanges(accountId, data.changed[accountId].Email)
+           }
+           if (data.changed?.[accountId]?.Mailbox) {
+             console.log('[Sync] Mailbox state changed')
+             // Trigger mailbox refresh
+             window.dispatchEvent(new CustomEvent('mailbox-changed'))
+           }
+         } catch (error) {
+           console.error('[Sync] Failed to process push event:', error)
+           // Don't let one bad event kill the entire sync
+         }
+       })
 
-    // Get changes since last state
-    const syncState = await db.syncStates.get(`user:${this.currentUserId}:global`)
-    if (!syncState) return
+       this.eventSource.addEventListener('error', (event) => {
+         console.error('[Sync] EventSource error:', event)
+         this.eventSource?.close()
+         this.eventSource = null
 
-    try {
-      const changes = await jmapClient.request([
-        [
-          'Email/changes',
-          {
-            accountId,
-            sinceState: syncState.state,
-            maxChanges: 500, // Limit to prevent overwhelming
-          },
-          '0',
-        ],
-      ])
+         // Attempt reconnection with exponential backoff
+         if (reconnectAttempts < maxReconnectAttempts) {
+           reconnectAttempts++
+           const delay = reconnectDelay * Math.pow(2, reconnectAttempts - 1)
+           console.log(`[Sync] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`)
+           setTimeout(() => connect(), delay)
+         } else {
+           console.error('[Sync] Max reconnection attempts reached')
+         }
+       })
+     } catch (error) {
+       console.error('[Sync] Failed to create EventSource:', error)
+     }
+   }
 
-      // Process changes in batches to avoid blocking
-      // Implementation would handle created, updated, destroyed arrays
-    } catch (error) {
-      console.error('[Sync] Failed to handle email changes:', error)
-    }
-  }
+   connect()
+ }
 
-  /**
-   * Prefetch email bodies for performance
-   * Issue: Resource management and user isolation
-   * Line: src/db/sync.ts:201
-   * Attack: Could be used to exhaust storage or bandwidth
-   * Fix: Rate limit and size limits
-   */
-  async prefetchBodies(emailIds: string[]) {
-    if (!this.currentUserId) return
-    if (emailIds.length > 10) {
-      emailIds = emailIds.slice(0, 10) // Limit batch size
-    }
+ private async handleEmailChanges(accountId: string, newState: string) {
+   if (!this.currentUserId) return
 
-    // Batch fetch email bodies that aren't cached
-    const emails = await db.emails
-      .where('_userId')
-      .equals(this.currentUserId)
-      .and((email) => emailIds.includes(email.id))
-      .toArray()
+   // Get changes since last state
+   const syncState = await db.syncStates.get(`user:${this.currentUserId}:global`)
+   if (!syncState) return
 
-    const needsBodies = emails.filter((e) => !e.bodyValues)
+   try {
+     const changes = await jmapClient.request([
+       [
+         'Email/changes',
+         {
+           accountId,
+           sinceState: syncState.state,
+           maxChanges: 500, // Limit to prevent overwhelming
+         },
+         '0',
+       ],
+     ])
 
-    if (needsBodies.length === 0) return
+     // Process changes in batches to avoid blocking
+     // Implementation would handle created, updated, destroyed arrays
+   } catch (error) {
+     console.error('[Sync] Failed to handle email changes:', error)
+   }
+ }
 
-    // Fetch from server in smaller batches
-    // Implementation would fetch and update cached emails
-  }
+ async prefetchBodies(emailIds: string[]) {
+   if (!this.currentUserId) return
+   if (emailIds.length > 10) {
+     emailIds = emailIds.slice(0, 10) // Limit batch size
+   }
 
-  /**
-   * Clean shutdown of sync manager
-   * Issue: Resource cleanup
-   * Line: src/db/sync.ts:223
-   * Attack: Memory leaks if not properly cleaned up
-   * Fix: Ensure all resources are released
-   */
-  stop() {
-    this.eventSource?.close()
-    this.eventSource = null
-    this.currentUserId = null
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval)
-      this.syncInterval = null
-    }
-  }
+   // Batch fetch email bodies that aren't cached
+   const emails = await db.emails
+     .where('_userId')
+     .equals(this.currentUserId)
+     .and((email) => emailIds.includes(email.id))
+     .toArray()
 
-  /**
-   * Get current user ID for validation
-   * Issue: User context validation
-   * Line: src/db/sync.ts:237
-   * Attack: Operations without proper user context
-   * Fix: Always validate user before operations
-   */
-  getCurrentUserId(): string | null {
-    return this.currentUserId
-  }
+   const needsBodies = emails.filter((e) => !e.bodyValues)
+
+   if (needsBodies.length === 0) return
+
+   // Fetch from server in smaller batches
+   // Implementation would fetch and update cached emails
+ }
+
+ stop() {
+   this.eventSource?.close()
+   this.eventSource = null
+   this.currentUserId = null
+   if (this.syncInterval) {
+     clearInterval(this.syncInterval)
+     this.syncInterval = null
+   }
+ }
+
+ getCurrentUserId(): string | null {
+   return this.currentUserId
+ }
 }
 
 export const syncManager = new SyncManager()
