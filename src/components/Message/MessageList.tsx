@@ -1,4 +1,4 @@
-// src/components/Message/MessageList.tsx
+// src/components/Message/MessageList.tsx - Updated with refresh indicators
 import React, { useMemo, useEffect, useRef, useState } from 'react'
 import { useEmails, useEmailSearch } from '../../hooks/useJMAP'
 import { useOfflineEmails, useOfflineSearch } from '../../hooks/useIndexedDB'
@@ -16,7 +16,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
 
   // Use offline-first email loading
-  const { data: offlineData, isLoading, refetch } = useOfflineEmails(selectedMailboxId)
+  const { data: offlineData, isLoading: isOfflineLoading, refetch: refetchOffline } = useOfflineEmails(selectedMailboxId)
 
   // Fallback to online for infinite scroll if needed
   const {
@@ -26,11 +26,18 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     total: onlineTotal,
     fetchNextPage,
     refetch: refetchOnline,
+    isLoading: isOnlineLoading,
+    isFetching: isOnlineFetching,
   } = useEmails(selectedMailboxId)
 
   const [searchDebounce, setSearchDebounce] = useState('')
   const [showServerSearch, setShowServerSearch] = useState(false)
+  const [lastRefreshTime, setLastRefreshTime] = useState(Date.now())
 
+  // Track if we're loading/refreshing
+  const isLoading = isOfflineLoading || isOnlineLoading
+  const isRefreshing = isOnlineFetching && !isFetchingNextPage
+  
   // Debounce search query
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -55,10 +62,10 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
   useEffect(() => {
     if (!offlineData?.emails?.length && selectedMailboxId && !isLoading) {
       console.log('[MessageList] No offline data, fetching from server')
-      refetch()
+      refetchOffline()
       fetchNextPage()
     }
-  }, [selectedMailboxId, offlineData, isLoading, refetch, fetchNextPage])
+  }, [selectedMailboxId, offlineData, isLoading, refetchOffline, fetchNextPage])
 
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
@@ -79,7 +86,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       },
       { 
         threshold: 0.1, 
-        rootMargin: '100px' // Load more when within 100px of the bottom
+        rootMargin: '100px'
       }
     )
 
@@ -150,6 +157,13 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     }
   }, [searchDebounce, filteredEmails.length, showServerSearch, isLoading])
 
+  // Update last refresh time when data changes
+  useEffect(() => {
+    if (filteredEmails.length > 0) {
+      setLastRefreshTime(Date.now())
+    }
+  }, [filteredEmails.length])
+
   const formatEmailDate = (dateString: string): string => {
     const date = new Date(dateString)
     if (isToday(date)) return format(date, 'HH:mm')
@@ -198,6 +212,12 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     }
   }
 
+  const handleRefresh = () => {
+    console.log('[MessageList] Manual refresh triggered')
+    refetchOffline()
+    refetchOnline()
+  }
+
   if (!selectedMailboxId) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -206,10 +226,13 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     )
   }
 
-  if (isLoading) {
+  if (isLoading && filteredEmails.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="animate-spin i-eos-icons:loading text-2xl text-[var(--text-tertiary)]" />
+        <div className="text-center">
+          <div className="animate-spin i-eos-icons:loading text-2xl text-[var(--text-tertiary)] mb-2" />
+          <p className="text-[var(--text-tertiary)]">Loading messages...</p>
+        </div>
       </div>
     )
   }
@@ -227,16 +250,32 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
               {showServerSearch ? 'No results on server' : 'Searching server...'}
             </p>
           )}
+          <button
+            onClick={handleRefresh}
+            className="mt-4 px-4 py-2 text-sm bg-[var(--primary-color)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors"
+          >
+            Refresh
+          </button>
         </div>
       </div>
     )
   }
+
+  const timeSinceRefresh = Math.floor((Date.now() - lastRefreshTime) / 1000)
+  const refreshText = timeSinceRefresh < 60 
+    ? 'Just updated' 
+    : timeSinceRefresh < 3600 
+    ? `${Math.floor(timeSinceRefresh / 60)}m ago` 
+    : `${Math.floor(timeSinceRefresh / 3600)}h ago`
 
   return (
     <div className="h-full overflow-y-auto" ref={listRef} tabIndex={0}>
       {/* Header */}
       <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between sticky top-0 bg-[var(--bg-secondary)] z-10">
         <span className="text-sm text-[var(--text-secondary)]">
+          {isRefreshing && (
+            <div className="i-eos-icons:loading animate-spin inline mr-2" />
+          )}
           {showServerSearch ? (
             <>
               <div className="i-lucide:search inline mr-1" />
@@ -260,7 +299,8 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
             </>
           )}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+          <span>{refreshText}</span>
           {showServerSearch && (
             <button
               className="text-xs text-[var(--primary-color)] hover:underline"
@@ -273,14 +313,12 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
             </button>
           )}
           <button
-            className="p-1 hover:bg-white/10 rounded"
+            className="p-1 hover:bg-white/10 rounded transition-colors"
             title="Refresh"
-            onClick={() => {
-              refetch()
-              refetchOnline()
-            }}
+            onClick={handleRefresh}
+            disabled={isRefreshing}
           >
-            <div className="i-lucide:refresh-cw text-sm" />
+            <div className={`i-lucide:refresh-cw text-sm ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>

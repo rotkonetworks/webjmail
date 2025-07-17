@@ -1,4 +1,4 @@
-// src/hooks/useJMAP.ts - Fixed EventSource handling
+// src/hooks/useJMAP.ts - Fixed real-time updates
 import React from 'react'
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { jmapClient } from '../api/jmap'
@@ -96,9 +96,9 @@ export function useEmails(mailboxId: string | null) {
       return loadedCount
     },
     enabled: !!session && !!accountId && !!mailboxId,
-    staleTime: 1 * 60 * 1000,
-    refetchInterval: 30 * 1000,
-    refetchIntervalInBackground: true,
+    staleTime: 30 * 1000, // Reduced to 30 seconds for more frequent updates
+    refetchInterval: false, // Disable polling in favor of EventSource
+    refetchIntervalInBackground: false,
     retry: (failureCount, error) => {
       if (error instanceof Error && error.message.includes('401')) {
         console.error('[useEmails] Got 401, not retrying')
@@ -108,29 +108,59 @@ export function useEmails(mailboxId: string | null) {
     },
   })
 
-  // Enhanced EventSource setup with proper error handling
+  // Simplified EventSource with better error handling and fallback
   React.useEffect(() => {
     if (!accountId || !session || !mailboxId) return
 
     let eventSource: EventSource | null = null
     let reconnectTimer: NodeJS.Timeout | null = null
+    let pollTimer: NodeJS.Timeout | null = null
     let reconnectAttempts = 0
-    const maxReconnectAttempts = 5
-    const baseReconnectDelay = 1000 // Start with 1 second
+    const maxReconnectAttempts = 3 // Reduced attempts
+    const baseReconnectDelay = 2000 // 2 seconds
+
+    // Fallback polling function
+    const startFallbackPolling = () => {
+      console.log('[EventSource] Starting fallback polling every 30 seconds')
+      pollTimer = setInterval(() => {
+        console.log('[EventSource] Fallback poll - invalidating queries')
+        queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
+        queryClient.invalidateQueries({ queryKey: ['mailboxes', accountId] })
+      }, 30000) // Poll every 30 seconds
+    }
 
     const connectEventSource = () => {
       try {
         console.log('[EventSource] Attempting to connect... (attempt', reconnectAttempts + 1, ')')
         
+        // Try EventSource first
         eventSource = jmapClient.createEventSource(['Email', 'Mailbox'])
+        
+        let connectionTimeout = setTimeout(() => {
+          console.log('[EventSource] Connection timeout - falling back to polling')
+          if (eventSource) {
+            eventSource.close()
+            eventSource = null
+          }
+          startFallbackPolling()
+        }, 5000) // 5 second timeout
         
         eventSource.addEventListener('open', () => {
           console.log('[EventSource] Connection established successfully')
+          clearTimeout(connectionTimeout)
           reconnectAttempts = 0 // Reset on successful connection
+          
+          // Clear any existing polling
+          if (pollTimer) {
+            clearInterval(pollTimer)
+            pollTimer = null
+          }
         })
 
         eventSource.addEventListener('message', (event) => {
           console.log('[EventSource] Received generic message:', event.data)
+          // Invalidate queries on any message
+          queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
         })
         
         eventSource.addEventListener('state', async (event) => {
@@ -142,26 +172,36 @@ export function useEmails(mailboxId: string | null) {
               const changes = data.changed[accountId]
               
               if (changes.Email) {
-                console.log('[EventSource] Email state changed, invalidating queries...')
-                // Invalidate all email queries for this account
+                console.log('[EventSource] Email state changed, refreshing emails...')
+                // Force immediate refetch
                 queryClient.invalidateQueries({ 
-                  queryKey: ['emails', accountId] 
+                  queryKey: ['emails', accountId],
+                  refetchType: 'all'
                 })
               }
               
               if (changes.Mailbox) {
-                console.log('[EventSource] Mailbox state changed, invalidating mailbox queries...')
+                console.log('[EventSource] Mailbox state changed, refreshing mailboxes...')
                 queryClient.invalidateQueries({ 
-                  queryKey: ['mailboxes', accountId] 
+                  queryKey: ['mailboxes', accountId],
+                  refetchType: 'all' 
                 })
               }
+            } else {
+              // Even if we can't parse the changes, refresh everything
+              console.log('[EventSource] Generic state change, refreshing all queries')
+              queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
+              queryClient.invalidateQueries({ queryKey: ['mailboxes', accountId] })
             }
           } catch (error) {
             console.error('[EventSource] Failed to process state change:', error)
+            // Still trigger a refresh even if we can't parse the event
+            queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
           }
         })
 
         eventSource.addEventListener('error', (event) => {
+          clearTimeout(connectionTimeout)
           console.error('[EventSource] Connection error occurred')
           console.error('[EventSource] ReadyState:', eventSource?.readyState)
           
@@ -170,7 +210,7 @@ export function useEmails(mailboxId: string | null) {
             
             if (reconnectAttempts < maxReconnectAttempts) {
               reconnectAttempts++
-              const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts - 1) // Exponential backoff
+              const delay = baseReconnectDelay * Math.pow(1.5, reconnectAttempts - 1) // Gentler backoff
               
               console.log(`[EventSource] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`)
               
@@ -182,26 +222,19 @@ export function useEmails(mailboxId: string | null) {
                 connectEventSource()
               }, delay)
             } else {
-              console.error('[EventSource] Max reconnection attempts reached, giving up')
+              console.log('[EventSource] Max reconnection attempts reached, using fallback polling')
+              startFallbackPolling()
             }
           }
         })
 
       } catch (error) {
         console.error('[EventSource] Failed to create connection:', error)
-        
-        // Retry with exponential backoff
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++
-          const delay = baseReconnectDelay * Math.pow(2, reconnectAttempts - 1)
-          
-          console.log(`[EventSource] Retrying connection in ${delay}ms`)
-          reconnectTimer = setTimeout(connectEventSource, delay)
-        }
+        startFallbackPolling()
       }
     }
 
-    // Initial connection
+    // Start with EventSource, fallback to polling if it fails
     connectEventSource()
 
     // Cleanup function
@@ -213,6 +246,11 @@ export function useEmails(mailboxId: string | null) {
         reconnectTimer = null
       }
       
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+      
       if (eventSource) {
         eventSource.close()
         eventSource = null
@@ -220,11 +258,24 @@ export function useEmails(mailboxId: string | null) {
     }
   }, [accountId, session, mailboxId, queryClient])
 
+  // Force refetch every 2 minutes as additional fallback
+  React.useEffect(() => {
+    if (!accountId || !mailboxId) return
+
+    const interval = setInterval(() => {
+      console.log('[useEmails] Periodic refresh (2 min)')
+      query.refetch()
+    }, 2 * 60 * 1000) // 2 minutes
+
+    return () => clearInterval(interval)
+  }, [accountId, mailboxId, query.refetch])
+
   // Update store when data changes
   React.useEffect(() => {
     if (query.data) {
       const allEmails = query.data.pages.flatMap((page) => page.emails)
       setEmails(allEmails)
+      console.log('[useEmails] Updated store with', allEmails.length, 'emails')
     }
   }, [query.data, setEmails])
 
@@ -242,6 +293,18 @@ export function useEmails(mailboxId: string | null) {
     fetchNextPage: query.fetchNextPage,
     refetch: query.refetch,
   }
+}
+
+// Add a manual refresh hook for testing
+export function useManualRefresh() {
+  const queryClient = useQueryClient()
+  const accountId = usePrimaryAccountId()
+
+  return React.useCallback(() => {
+    console.log('[Manual Refresh] Refreshing all queries')
+    queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
+    queryClient.invalidateQueries({ queryKey: ['mailboxes', accountId] })
+  }, [queryClient, accountId])
 }
 
 export function useEmailThread(threadId: string | null) {
@@ -283,8 +346,8 @@ export function useMarkAsRead() {
       updateEmail(emailId, {
         keywords: { $seen: isRead },
       })
-    },
-    onSettled: () => {
+      
+      // Also invalidate queries to ensure fresh data
       if (accountId) {
         queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
       }
@@ -317,12 +380,11 @@ export function useFlagEmail() {
       const result = await jmapClient.setEmail(accountId, update)
       return result
     },
-    onSuccess: (_, { emailId, isFlagged }) => {
+    onSuccess: (_, { emailId, isFlagged, accountId }) => {
       updateEmail(emailId, {
         keywords: { $flagged: isFlagged },
       })
-    },
-    onSettled: (_, __, { accountId }) => {
+      
       queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
     },
   })
@@ -347,10 +409,8 @@ export function useDeleteEmail() {
 
       return result
     },
-    onSuccess: (_, { emailId }) => {
+    onSuccess: (_, { emailId, accountId }) => {
       deleteEmailFromStore(emailId)
-    },
-    onSettled: (_, __, { accountId }) => {
       queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
     },
   })
@@ -504,7 +564,9 @@ export function useSendEmail() {
     },
     onSuccess: () => {
       if (accountId) {
+        // Force refresh both sent and inbox folders
         queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
+        queryClient.invalidateQueries({ queryKey: ['mailboxes', accountId] })
       }
     },
     onError: (error) => {

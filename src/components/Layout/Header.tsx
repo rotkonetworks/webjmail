@@ -1,5 +1,7 @@
-import React, { useRef, useEffect } from 'react'
+// src/components/Layout/Header.tsx - Updated with manual refresh
+import React, { useRef, useEffect, useState } from 'react'
 import { useAuthStore } from '../../stores/authStore'
+import { useManualRefresh } from '../../hooks/useJMAP'
 import { config } from '../../config'
 
 interface HeaderProps {
@@ -12,6 +14,8 @@ interface HeaderProps {
 export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: HeaderProps) {
   const session = useAuthStore((state) => state.session)
   const searchRef = useRef<HTMLInputElement>(null)
+  const manualRefresh = useManualRefresh()
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Focus search on Cmd/Ctrl + K
   useEffect(() => {
@@ -20,11 +24,28 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
         e.preventDefault()
         searchRef.current?.focus()
       }
+      
+      // Add Cmd/Ctrl + R for manual refresh
+      if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+        e.preventDefault()
+        handleManualRefresh()
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true)
+    console.log('[Header] Manual refresh triggered')
+    manualRefresh()
+    
+    // Visual feedback
+    setTimeout(() => {
+      setIsRefreshing(false)
+    }, 1000)
+  }
 
   const username = session?.username || 'User'
   const firstLetter = username.charAt(0).toUpperCase()
@@ -64,6 +85,16 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
 
       {/* Right side actions */}
       <div className="flex items-center gap-2">
+        {/* Manual Refresh Button */}
+        <button
+          onClick={handleManualRefresh}
+          disabled={isRefreshing}
+          className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+          title="Refresh emails (⌘R)"
+        >
+          <div className={`i-lucide:refresh-cw ${isRefreshing ? 'animate-spin' : ''}`} />
+        </button>
+
         {/* Compose Button */}
         <button
           onClick={onCompose}
