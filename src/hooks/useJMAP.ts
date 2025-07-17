@@ -7,7 +7,11 @@ import { useMailStore } from '../stores/mailStore'
 
 export function usePrimaryAccountId() {
   const session = useAuthStore((state) => state.session)
-  return session?.primaryAccounts?.['urn:ietf:params:jmap:mail'] || null
+  const accountId = session?.primaryAccounts?.['urn:ietf:params:jmap:mail'] || null
+  
+  console.log('[useJMAP] Primary account ID:', accountId)
+  
+  return accountId
 }
 
 export function useMailboxes() {
@@ -19,12 +23,25 @@ export function useMailboxes() {
     queryKey: ['mailboxes', accountId],
     queryFn: async () => {
       if (!accountId) throw new Error('No account ID')
+      
+      console.log('[useMailboxes] Fetching mailboxes for account:', accountId)
+      
       const mailboxes = await jmapClient.getMailboxes(accountId)
       setMailboxes(mailboxes)
+      
+      console.log('[useMailboxes] Fetched mailboxes:', mailboxes.length)
+      
       return mailboxes
     },
     enabled: !!session && !!accountId,
     staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: (failureCount, error) => {
+      // Don't retry on 401 errors
+      if (error instanceof Error && error.message.includes('401')) {
+        return false
+      }
+      return failureCount < 3
+    },
   })
 }
 
@@ -84,6 +101,14 @@ export function useEmails(mailboxId: string | null) {
     staleTime: 1 * 60 * 1000,
     refetchInterval: 30 * 1000, // Check for new emails every 30 seconds
     refetchIntervalInBackground: true,
+    retry: (failureCount, error) => {
+      // Don't retry on 401 errors
+      if (error instanceof Error && error.message.includes('401')) {
+        console.error('[useEmails] Got 401, not retrying')
+        return false
+      }
+      return failureCount < 3
+    },
   })
 
   // Setup real-time updates via EventSource
@@ -332,6 +357,8 @@ export function useSendEmail() {
       if (!accountId) throw new Error('No account ID')
       if (!session) throw new Error('No session')
 
+      console.log('[useSendEmail] Sending email:', { to, subject })
+
       // Validate input parameters
       if (!to || to.length === 0) {
         throw new Error('At least one recipient is required')
@@ -474,6 +501,8 @@ export function useSendEmail() {
         ],
       ])
 
+      console.log('[useSendEmail] Email sent successfully')
+      
       return result
     },
     onSuccess: () => {

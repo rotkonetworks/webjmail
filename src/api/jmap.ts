@@ -1,4 +1,3 @@
-// src/api/jmap.ts
 import { JMAPSession, Email, Mailbox, Thread, JMAPRequest, JMAPResponse } from './types'
 
 export class JMAPClient {
@@ -7,21 +6,29 @@ export class JMAPClient {
   private baseUrl: string = ''
 
   async authenticate(serverUrl: string, username: string, password: string) {
-    // For Stalwart, we might need to handle both Basic and Bearer auth
+    // Ensure proper Basic auth format (exactly one space after "Basic")
     const token = 'Basic ' + btoa(username + ':' + password)
+    
+    console.log('[Auth] Authenticating with:', {
+      serverUrl,
+      username,
+      tokenFormat: token.substring(0, 10) + '...',
+    })
 
     try {
       const response = await fetch(serverUrl, {
         method: 'GET',
         headers: {
-          Authorization: token,
-          Accept: 'application/json',
+          'Authorization': token,
+          'Accept': 'application/json',
         },
+        credentials: 'include', // Include cookies if any
       })
 
       if (!response.ok) {
         const errorText = await response.text()
-
+        console.error('[Auth] Failed:', response.status, errorText)
+        
         if (response.status === 401) {
           throw new Error('Invalid username or password')
         }
@@ -35,23 +42,43 @@ export class JMAPClient {
       }
 
       const responseText = await response.text()
+      console.log('[Auth] Raw session response:', responseText)
 
       try {
         this.session = JSON.parse(responseText)
+        console.log('[Auth] Parsed session:', this.session)
+        
+        // Check if the session contains any special auth token
+        if ((this.session as any).accessToken) {
+          console.log('[Auth] Found accessToken in session')
+          this.accessToken = `Bearer ${(this.session as any).accessToken}`
+        } else if ((this.session as any).token) {
+          console.log('[Auth] Found token in session')
+          this.accessToken = `Bearer ${(this.session as any).token}`
+        } else {
+          // Continue using Basic auth
+          console.log('[Auth] No special token found, continuing with Basic auth')
+          this.accessToken = token
+        }
+        
+        console.log('[Auth] Using auth header:', this.accessToken.substring(0, 20) + '...')
+        console.log('[Auth] Session apiUrl:', this.session.apiUrl)
+        
+        this.baseUrl = serverUrl.replace('/.well-known/jmap', '')
+
+        // Validate session structure
+        if (!this.session.apiUrl) {
+          throw new Error('Invalid session: missing apiUrl')
+        }
+
+        return this.session
       } catch (parseError) {
+        console.error('[Auth] Parse error:', parseError)
+        console.error('[Auth] Response that failed to parse:', responseText)
         throw new Error('Invalid response from server. Expected JSON.')
       }
-
-      this.accessToken = token
-      this.baseUrl = serverUrl.replace('/.well-known/jmap', '')
-
-      // Validate session structure
-      if (!this.session.apiUrl) {
-        throw new Error('Invalid session: missing apiUrl')
-      }
-
-      return this.session
     } catch (error) {
+      console.error('[Auth] Error:', error)
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
         throw new Error(
           'Cannot connect to server. Please check:\n- The server URL is correct\n- The server is running\n- CORS is properly configured\n- SSL certificates are valid'
@@ -65,15 +92,18 @@ export class JMAPClient {
     // In development, use the proxy path instead of the full URL
     if (import.meta.env.DEV) {
       try {
-        const urlObj = new URL(url)
-
+        const urlObj = new URL(url, this.baseUrl || window.location.origin)
+        console.log('[JMAP] Original URL:', url)
+        console.log('[JMAP] Parsed URL:', urlObj.href)
+        
         // Check if this is a mail.rotko.net URL
-        if (urlObj.hostname === 'mail.rotko.net') {
+        if (urlObj.hostname === 'mail.rotko.net' || urlObj.hostname === 'localhost') {
           // Return just the pathname (e.g., /jmap/)
+          console.log('[JMAP] Using proxied path:', urlObj.pathname)
           return urlObj.pathname
         }
       } catch (e) {
-        // URL parsing error - continue with original URL
+        console.error('[JMAP] URL parsing error:', e)
       }
     }
     return url
@@ -89,47 +119,81 @@ export class JMAPClient {
       methodCalls,
     }
 
-    // Use the proxied URL in development
     const apiUrl = this.getProxiedUrl(this.session.apiUrl)
+
+    // Debug logging
+    console.log('[JMAP] Request details:', {
+      apiUrl,
+      fullUrl: new URL(apiUrl, window.location.origin).href,
+      authHeader: this.accessToken,
+      authHeaderLength: this.accessToken.length,
+      sessionApiUrl: this.session.apiUrl,
+      methodCalls: methodCalls.map(([method]) => method),
+    })
 
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          Authorization: this.accessToken,
+          'Authorization': this.accessToken,
           'Content-Type': 'application/json',
-          Accept: 'application/json',
+          'Accept': 'application/json',
         },
+        credentials: 'include', // Include cookies if any
         body: JSON.stringify(request),
+      })
+
+      console.log('[JMAP] Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
       })
 
       if (!response.ok) {
         const errorText = await response.text()
+        console.error('[JMAP] Error response body:', errorText)
 
         if (response.status === 401) {
-          // Session expired
+          // Try to parse the error for more details
+          try {
+            const errorJson = JSON.parse(errorText)
+            console.error('[JMAP] Parsed error:', errorJson)
+          } catch (e) {
+            // Not JSON, that's ok
+          }
+          
+          // Session expired or invalid
           this.session = null
-          throw new Error('Session expired. Please login again.')
+          throw new Error('Authentication failed. Please login again.')
         }
+        
         throw new Error(`Request failed: ${response.statusText} (${response.status})`)
       }
 
       const data: JMAPResponse = await response.json()
+      console.log('[JMAP] Success response:', {
+        methodResponses: data.methodResponses.map(([method, , id]) => `${method}[${id}]`),
+        sessionState: data.sessionState,
+      })
 
       // Check for method-level errors
       for (const [method, result, id] of data.methodResponses) {
         if (method === 'error') {
+          console.error('[JMAP] Method error:', result)
           throw new Error(result.description || 'JMAP method error')
         }
       }
 
       return data.methodResponses
     } catch (error) {
+      console.error('[JMAP] Request failed:', error)
       throw error
     }
   }
 
   async getMailboxes(accountId: string): Promise<Mailbox[]> {
+    console.log('[JMAP] Getting mailboxes for account:', accountId)
+    
     const responses = await this.request([
       [
         'Mailbox/get',
@@ -142,6 +206,7 @@ export class JMAPClient {
     ])
 
     const [, result] = responses[0]
+    console.log('[JMAP] Mailboxes retrieved:', result.list?.length || 0)
 
     return result.list || []
   }
@@ -306,6 +371,8 @@ export class JMAPClient {
     position = 0,
     limit = 50
   ): Promise<{ emails: Email[]; total: number; position: number }> {
+    console.log('[JMAP] Getting emails:', { accountId, filter, position, limit })
+
     // Default properties if not specified
     if (!properties) {
       properties = [
@@ -367,6 +434,12 @@ export class JMAPClient {
 
     const [, queryResult] = responses[0]
     const [, getResult] = responses[1]
+
+    console.log('[JMAP] Emails retrieved:', {
+      count: getResult.list?.length || 0,
+      total: queryResult.total || 0,
+      position: queryResult.position || 0,
+    })
 
     return {
       emails: getResult.list || [],
