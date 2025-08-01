@@ -1,5 +1,6 @@
 import Dexie, { Table } from 'dexie'
 import { Email, Mailbox, Thread, JMAPSession } from '../api/types'
+import { config } from '../config'
 
 export interface CachedEmail extends Email {
   _syncedAt: number
@@ -122,8 +123,8 @@ class MailDB extends Dexie {
 
     if (!session) return null
 
-    // Session expires after 2 hours of inactivity for security
-    const SESSION_TIMEOUT = 2 * 60 * 60 * 1000
+    // Session expires after configured timeout for security
+    const SESSION_TIMEOUT = config.security.sessionTimeoutMs
     if (Date.now() - session.lastActivity > SESSION_TIMEOUT) {
       await this.sessions.delete(session.id)
       return null

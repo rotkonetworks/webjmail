@@ -177,7 +177,6 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                 'h4',
                 'h5',
                 'h6',
-                'img',
                 'table',
                 'tr',
                 'td',
@@ -187,7 +186,11 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                 'pre',
                 'code',
               ],
-              ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'style', 'target'],
+              FORBID_TAGS: ['img', 'script', 'style', 'object', 'embed', 'iframe', 'form', 'input'],
+              ALLOWED_ATTR: ['href', 'alt', 'class', 'target'],
+              FORBID_ATTR: ['src', 'style', 'on*', 'javascript:'],
+              ADD_ATTR: ['target'],
+              ALLOW_DATA_ATTR: false,
             }),
           }}
         />
