@@ -78,27 +78,35 @@ export default defineConfig({
         },
         configure: (proxy, options) => {
           proxy.on('proxyReq', (proxyReq, req, res) => {
-            console.log('[Proxy] EventSource request URL:', req.url)
-            console.log('[Proxy] EventSource method:', req.method)
-            console.log('[Proxy] EventSource headers:', req.headers)
+            if (import.meta.env.DEV) {
+              console.log('[Proxy] EventSource request URL:', req.url)
+              console.log('[Proxy] EventSource method:', req.method)
+            }
             
-            // Extract auth from query parameter and convert to header
-            const url = new URL(req.url, 'http://localhost')
-            const authParam = url.searchParams.get('auth')
-            
-            if (authParam) {
-              // Remove auth from query params
-              url.searchParams.delete('auth')
-              const newPath = url.pathname + (url.search ? url.search : '')
+            // Use Authorization header instead of query parameter for security
+            if (req.headers.authorization) {
+              proxyReq.setHeader('Authorization', req.headers.authorization)
+            } else {
+              // Extract auth from query parameter only in dev mode (not recommended for prod)
+              const url = new URL(req.url, 'http://localhost')
+              const authParam = url.searchParams.get('auth')
               
-              // Set Authorization header
-              proxyReq.setHeader('Authorization', 'Basic ' + authParam)
-              
-              // Update the request path to match server expectation
-              proxyReq.path = '/jmap/eventsource/' + (url.search ? url.search : '')
-              
-              console.log('[Proxy] EventSource auth extracted, new path:', proxyReq.path)
-              console.log('[Proxy] EventSource auth header set:', 'Basic ' + authParam.substring(0, 10) + '...')
+              if (authParam) {
+                // Remove auth from query params for security
+                url.searchParams.delete('auth')
+                
+                // Set Authorization header
+                proxyReq.setHeader('Authorization', 'Basic ' + authParam)
+                
+                // Update the request path to match server expectation
+                proxyReq.path = '/jmap/eventsource/' + (url.search ? url.search : '')
+                
+                if (import.meta.env.DEV) {
+                  console.log('[Proxy] EventSource auth extracted, new path:', proxyReq.path)
+                  // Never log full auth token, even in dev
+                  console.log('[Proxy] EventSource auth header set')
+                }
+              }
             }
             
             // Set proper EventSource headers
@@ -106,21 +114,27 @@ export default defineConfig({
             proxyReq.setHeader('Cache-Control', 'no-cache')
             proxyReq.setHeader('Connection', 'keep-alive')
             
-            // Log final proxy request details
-            console.log('[Proxy] Final EventSource path:', proxyReq.path)
-            console.log('[Proxy] Final EventSource headers:', proxyReq.getHeaders())
+            if (import.meta.env.DEV) {
+              console.log('[Proxy] Final EventSource path:', proxyReq.path)
+            }
           })
           
           proxy.on('proxyRes', (proxyRes, req, res) => {
-            console.log('[Proxy] EventSource response status:', proxyRes.statusCode)
-            console.log('[Proxy] EventSource response headers:', proxyRes.headers)
+            if (import.meta.env.DEV) {
+              console.log('[Proxy] EventSource response status:', proxyRes.statusCode)
+              console.log('[Proxy] EventSource response headers:', proxyRes.headers)
+            }
             
             // Check if response is actually an EventSource stream
             const contentType = proxyRes.headers['content-type']
             if (proxyRes.statusCode === 200 && contentType && contentType.includes('text/event-stream')) {
-              console.log('[Proxy] Valid EventSource response detected')
+              if (import.meta.env.DEV) {
+                console.log('[Proxy] Valid EventSource response detected')
+              }
             } else {
-              console.error('[Proxy] Invalid EventSource response - Status:', proxyRes.statusCode, 'Content-Type:', contentType)
+              if (import.meta.env.DEV) {
+                console.error('[Proxy] Invalid EventSource response - Status:', proxyRes.statusCode, 'Content-Type:', contentType)
+              }
             }
             
             // Ensure proper EventSource response headers

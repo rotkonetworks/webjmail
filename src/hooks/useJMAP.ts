@@ -9,7 +9,9 @@ export function usePrimaryAccountId() {
   const session = useAuthStore((state) => state.session)
   const accountId = session?.primaryAccounts?.['urn:ietf:params:jmap:mail'] || null
   
-  console.log('[useJMAP] Primary account ID:', accountId)
+  if (import.meta.env.DEV) {
+    console.log('[useJMAP] Primary account ID:', accountId)
+  }
   
   return accountId
 }
@@ -24,12 +26,16 @@ export function useMailboxes() {
     queryFn: async () => {
       if (!accountId) throw new Error('No account ID')
       
-      console.log('[useMailboxes] Fetching mailboxes for account:', accountId)
+      if (import.meta.env.DEV) {
+        console.log('[useMailboxes] Fetching mailboxes for account:', accountId)
+      }
       
       const mailboxes = await jmapClient.getMailboxes(accountId)
       setMailboxes(mailboxes)
       
-      console.log('[useMailboxes] Fetched mailboxes:', mailboxes.length)
+      if (import.meta.env.DEV) {
+        console.log('[useMailboxes] Fetched mailboxes:', mailboxes.length)
+      }
       
       return mailboxes
     },
@@ -71,7 +77,9 @@ export function useEmails(mailboxId: string | null) {
     queryFn: async ({ pageParam = 0 }) => {
       if (!accountId || !mailboxId) return { emails: [], total: 0, position: 0 }
 
-      console.log('[useEmails] Fetching emails at position:', pageParam)
+      if (import.meta.env.DEV) {
+        console.log('[useEmails] Fetching emails at position:', pageParam)
+      }
       
       const result = await jmapClient.getEmails(
         accountId,
@@ -81,13 +89,17 @@ export function useEmails(mailboxId: string | null) {
         50
       )
 
-      console.log('[useEmails] Fetched:', result.emails.length, 'emails, total:', result.total)
+      if (import.meta.env.DEV) {
+        console.log('[useEmails] Fetched:', result.emails.length, 'emails, total:', result.total)
+      }
       
       return result
     },
     getNextPageParam: (lastPage, allPages) => {
       const loadedCount = allPages.reduce((sum, page) => sum + page.emails.length, 0)
-      console.log('[useEmails] Loaded:', loadedCount, 'of', lastPage.total)
+      if (import.meta.env.DEV) {
+        console.log('[useEmails] Loaded:', loadedCount, 'of', lastPage.total)
+      }
       
       if (loadedCount >= lastPage.total) {
         return undefined
@@ -98,6 +110,8 @@ export function useEmails(mailboxId: string | null) {
     enabled: !!session && !!accountId && !!mailboxId,
     staleTime: 30 * 1000, // Reduced to 30 seconds for more frequent updates
     refetchInterval: false, // Disable polling in favor of EventSource
+    keepPreviousData: true, // Prevent over-fetching
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000), // Exponential backoff
     refetchIntervalInBackground: false,
     retry: (failureCount, error) => {
       if (error instanceof Error && error.message.includes('401')) {
@@ -119,25 +133,33 @@ export function useEmails(mailboxId: string | null) {
     const maxReconnectAttempts = 3 // Reduced attempts
     const baseReconnectDelay = 2000 // 2 seconds
 
-    // Fallback polling function
+    // Fallback polling function  
     const startFallbackPolling = () => {
-      console.log('[EventSource] Starting fallback polling every 30 seconds')
+      if (import.meta.env.DEV) {
+        console.log('[EventSource] Starting fallback polling every 5 minutes')
+      }
       pollTimer = setInterval(() => {
-        console.log('[EventSource] Fallback poll - invalidating queries')
+        if (import.meta.env.DEV) {
+          console.log('[EventSource] Fallback poll - invalidating queries')
+        }
         queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
         queryClient.invalidateQueries({ queryKey: ['mailboxes', accountId] })
-      }, 30000) // Poll every 30 seconds
+      }, 5 * 60 * 1000) // Bug 10: Poll every 5 minutes instead of 30 seconds
     }
 
     const connectEventSource = () => {
       try {
-        console.log('[EventSource] Attempting to connect... (attempt', reconnectAttempts + 1, ')')
+        if (import.meta.env.DEV) {
+          console.log('[EventSource] Attempting to connect... (attempt', reconnectAttempts + 1, ')')
+        }
         
         // Try EventSource first
         eventSource = jmapClient.createEventSource(['Email', 'Mailbox'])
         
         let connectionTimeout = setTimeout(() => {
-          console.log('[EventSource] Connection timeout - falling back to polling')
+          if (import.meta.env.DEV) {
+            console.log('[EventSource] Connection timeout - falling back to polling')
+          }
           if (eventSource) {
             eventSource.close()
             eventSource = null
@@ -146,7 +168,9 @@ export function useEmails(mailboxId: string | null) {
         }, 5000) // 5 second timeout
         
         eventSource.addEventListener('open', () => {
-          console.log('[EventSource] Connection established successfully')
+          if (import.meta.env.DEV) {
+            console.log('[EventSource] Connection established successfully')
+          }
           clearTimeout(connectionTimeout)
           reconnectAttempts = 0 // Reset on successful connection
           

@@ -42,7 +42,9 @@ export function useOfflineEmails(mailboxId: string | null) {
           syncManager.startPushSync(accountId)
         })
         .catch((error) => {
-          console.error('[IndexedDB] Failed to initialize user:', error)
+          if (import.meta.env.DEV) {
+            console.error('[IndexedDB] Failed to initialize user:', error)
+          }
         })
 
       return () => syncManager.stop()
@@ -84,7 +86,9 @@ export function useOfflineEmails(mailboxId: string | null) {
         // If no cache, sync from server
         return syncManager.syncMailbox(accountId, mailboxId)
       } catch (error) {
-        console.error('[IndexedDB] Failed to fetch emails:', error)
+        if (import.meta.env.DEV) {
+          console.error('[IndexedDB] Failed to fetch emails:', error)
+        }
         return { emails: [], total: 0, fromCache: false }
       }
     },
@@ -99,6 +103,7 @@ export function useOfflineEmails(mailboxId: string | null) {
 
 export function useOfflineSearch(query: string, enabled: boolean) {
   const userId = useCurrentUserId()
+  const accountId = usePrimaryAccountId()
 
   return useQuery({
     queryKey: ['search', 'offline', userId, query],
@@ -111,9 +116,38 @@ export function useOfflineSearch(query: string, enabled: boolean) {
           await syncManager.initializeUser(userId)
         }
 
-        return syncManager.searchOffline(query)
+        // Get offline results first
+        const offlineResults = await syncManager.searchOffline(query)
+        
+        // Bug 8: Enhanced search fallback - if results are sparse, fetch from server
+        if (offlineResults.length < 5 && accountId) {
+          try {
+            const serverResults = await jmapClient.searchEmails(accountId, query)
+            
+            // Merge and deduplicate results (offline first, then server)
+            const allResults = [...offlineResults]
+            const offlineIds = new Set(offlineResults.map(e => e.id))
+            
+            for (const serverResult of serverResults) {
+              if (!offlineIds.has(serverResult.id)) {
+                allResults.push(serverResult)
+              }
+            }
+            
+            return allResults.slice(0, 50) // Limit total results
+          } catch (serverError) {
+            if (import.meta.env.DEV) {
+              console.log('[IndexedDB] Server search fallback failed, using offline only:', serverError)
+            }
+            return offlineResults
+          }
+        }
+
+        return offlineResults
       } catch (error) {
-        console.error('[IndexedDB] Search failed:', error)
+        if (import.meta.env.DEV) {
+          console.error('[IndexedDB] Search failed:', error)
+        }
         return []
       }
     },
@@ -136,7 +170,9 @@ export function useOfflineEmailsInfinite(mailboxId: string | null) {
           syncManager.startPushSync(accountId)
         })
         .catch((error) => {
-          console.error('[IndexedDB] Failed to initialize user:', error)
+          if (import.meta.env.DEV) {
+            console.error('[IndexedDB] Failed to initialize user:', error)
+          }
         })
 
       return () => syncManager.stop()
@@ -169,7 +205,9 @@ export function useOfflineEmailsInfinite(mailboxId: string | null) {
           total,
         }
       } catch (error) {
-        console.error('[IndexedDB] Failed to fetch infinite emails:', error)
+        if (import.meta.env.DEV) {
+          console.error('[IndexedDB] Failed to fetch infinite emails:', error)
+        }
         return { emails: [], hasMore: false, total: 0 }
       }
     },

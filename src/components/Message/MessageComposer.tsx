@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useSendEmail } from '../../hooks/useJMAP'
+import { config } from '../../config'
 
 interface MessageComposerProps {
   onClose: () => void
@@ -43,24 +44,68 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
   const [isSending, setIsSending] = useState(false)
 
   const handleSend = async () => {
-    if (!to.trim()) {
-      alert('Please enter at least one recipient')
-      return
+    // Bug 14: Add SendEmail validation
+    const validateEmail = (email: string): boolean => {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      return emailRegex.test(email) && email.length <= 254 // RFC 5321 limit
     }
 
-    setIsSending(true)
+    const validateEmailList = (emailList: string): string[] => {
+      const emails = emailList.split(',').map(e => e.trim()).filter(e => e.length > 0)
+      const invalid = emails.filter(email => !validateEmail(email))
+      if (invalid.length > 0) {
+        throw new Error(`Invalid email addresses: ${invalid.join(', ')}`)
+      }
+      return emails
+    }
+
     try {
+      // Validate recipients
+      if (!to.trim()) {
+        alert('Please enter at least one recipient')
+        return
+      }
+
+      const toEmails = validateEmailList(to)
+      const ccEmails = cc ? validateEmailList(cc) : []
+      
+      // Check recipient limits
+      if (toEmails.length + ccEmails.length > 100) {
+        alert('Too many recipients (limit: 100)')
+        return
+      }
+
+      // Validate subject length
+      if (subject.length > config.security.maxSubjectLength) {
+        alert(`Subject too long (limit: ${config.security.maxSubjectLength} characters)`)
+        return
+      }
+
+      // Validate body length (25MB limit for total email size)
+      const estimatedSize = new Blob([body]).size
+      if (estimatedSize > config.email.maxAttachmentSizeMB * 1024 * 1024) {
+        alert(`Email body too large (limit: ${config.email.maxAttachmentSizeMB}MB)`)
+        return
+      }
+
+      setIsSending(true)
+      
       await sendEmail.mutateAsync({
-        to: to.split(',').map((email) => ({ email: email.trim() })),
-        cc: cc ? cc.split(',').map((email) => ({ email: email.trim() })) : undefined,
-        subject,
+        to: toEmails.map((email) => ({ email })),
+        cc: ccEmails.length > 0 ? ccEmails.map((email) => ({ email })) : undefined,
+        subject: subject.trim(),
         textBody: body,
         inReplyTo: mode === 'reply' || mode === 'replyAll' ? replyTo?.emailId : undefined,
       })
+      
       onClose()
     } catch (error) {
-      console.error('Failed to send email:', error)
-      alert('Failed to send email. Please try again.')
+      if (import.meta.env.DEV) {
+        console.error('Failed to send email:', error)
+      }
+      
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send email. Please try again.'
+      alert(errorMessage)
     } finally {
       setIsSending(false)
     }
