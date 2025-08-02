@@ -14,8 +14,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const setTheme = useUIStore((state) => state.setTheme)
   const font = useUIStore((state) => state.font)
   const setFont = useUIStore((state) => state.setFont)
-  const composerMode = useUIStore((state) => state.composerMode)
-  const setComposerMode = useUIStore((state) => state.setComposerMode)
+  const imageLoadingMode = useUIStore((state) => state.imageLoadingMode)
+  const setImageLoadingMode = useUIStore((state) => state.setImageLoadingMode)
+  const htmlRichness = useUIStore((state) => state.htmlRichness)
+  const setHtmlRichness = useUIStore((state) => state.setHtmlRichness)
   const session = useAuthStore((state) => state.session)
   
   // In row mode, settings panel takes full width
@@ -88,7 +90,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </div>
             </div>
             
-            {/* Composer Mode */}
+            {/* Compose Mode */}
             <div>
               <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">Compose Mode</h3>
               <div className="space-y-2">
@@ -174,6 +176,95 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     <div className="font-medium">Polkadot</div>
                     <div className="text-sm text-[var(--text-tertiary)]">
                       Light theme with brand colors
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            
+            {/* Email Display */}
+            <div>
+              <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">Email Display</h3>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="htmlRichness"
+                    value="minimal"
+                    checked={htmlRichness === 'minimal'}
+                    onChange={() => setHtmlRichness('minimal')}
+                  />
+                  <div>
+                    <div className="font-medium">Minimal HTML</div>
+                    <div className="text-sm text-[var(--text-tertiary)]">
+                      Clean, text-focused view without styles
+                    </div>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="htmlRichness"
+                    value="rich"
+                    checked={htmlRichness === 'rich'}
+                    onChange={() => setHtmlRichness('rich')}
+                  />
+                  <div>
+                    <div className="font-medium">Rich HTML</div>
+                    <div className="text-sm text-[var(--text-tertiary)]">
+                      Full email formatting and styles
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            
+            {/* Privacy Settings */}
+            <div>
+              <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">Privacy</h3>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="imageLoading"
+                    value="always"
+                    checked={imageLoadingMode === 'always'}
+                    onChange={() => setImageLoadingMode('always')}
+                  />
+                  <div>
+                    <div className="font-medium">Always load images</div>
+                    <div className="text-sm text-[var(--text-tertiary)]">
+                      Images load automatically (less private)
+                    </div>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="imageLoading"
+                    value="ask"
+                    checked={imageLoadingMode === 'ask'}
+                    onChange={() => setImageLoadingMode('ask')}
+                  />
+                  <div>
+                    <div className="font-medium">Ask before loading</div>
+                    <div className="text-sm text-[var(--text-tertiary)]">
+                      Block tracking pixels, load per email
+                    </div>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="imageLoading"
+                    value="never"
+                    checked={imageLoadingMode === 'never'}
+                    onChange={() => setImageLoadingMode('never')}
+                  />
+                  <div>
+                    <div className="font-medium">Never load images</div>
+                    <div className="text-sm text-[var(--text-tertiary)]">
+                      Maximum privacy, no external requests
                     </div>
                   </div>
                 </label>
