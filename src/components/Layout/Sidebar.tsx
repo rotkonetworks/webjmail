@@ -3,6 +3,7 @@ import React from 'react'
 import { useMailboxes } from '../../hooks'
 import { useMailStore } from '../../stores/mailStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useUIStore } from '../../stores/uiStore'
 import { Mailbox } from '../../api/types'
 
 export function Sidebar() {
@@ -10,6 +11,16 @@ export function Sidebar() {
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
   const selectMailbox = useMailStore((state) => state.selectMailbox)
   const logout = useAuthStore((state) => state.logout)
+  const sidebarOpen = useUIStore((state) => state.sidebarOpen)
+  
+  // Check if mobile
+  const [isMobile, setIsMobile] = React.useState(false)
+  React.useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
   
   // Auto-select inbox
   React.useEffect(() => {
@@ -108,7 +119,11 @@ export function Sidebar() {
   }
   
   return (
-    <div className="w-[var(--sidebar-width)] bg-[var(--bg-secondary)] border-r border-[var(--border-color)] flex flex-col">
+    <div className={`
+      w-full h-full
+      bg-[var(--bg-secondary)] flex flex-col
+      ${isMobile && !sidebarOpen ? 'hidden' : ''}
+    `}>
       {/* Mailboxes */}
       <div className="flex-1 overflow-y-auto py-2">
         {sortedMailboxes.map((mailbox) => {

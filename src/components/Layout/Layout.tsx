@@ -7,6 +7,7 @@ import { MessageView } from '../Message/MessageView'
 import { MessageComposer } from '../Message/MessageComposer'
 import { InlineComposer } from '../Message/InlineComposer'
 import { SettingsPanel } from './SettingsPanel'
+import { ResizablePane } from './ResizablePane'
 import { useMailStore } from '../../stores/mailStore'
 import { useUIStore } from '../../stores/uiStore'
 
@@ -29,11 +30,17 @@ export function Layout() {
   const viewMode = useUIStore((state) => state.viewMode)
   const theme = useUIStore((state) => state.theme)
   const font = useUIStore((state) => state.font)
-  const composerMode = useUIStore((state) => state.composerMode)
+  const sidebarWidth = useUIStore((state) => state.sidebarWidth)
+  const setSidebarWidth = useUIStore((state) => state.setSidebarWidth)
+  const messageListWidth = useUIStore((state) => state.messageListWidth)
+  const setMessageListWidth = useUIStore((state) => state.setMessageListWidth)
+  // Composer mode is always inline now
   
   const [showComposer, setShowComposer] = useState(false)
   const [composers, setComposers] = useState<Composer[]>([])
   const [showSettings, setShowSettings] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [isTablet, setIsTablet] = useState(false)
   
   // Apply theme and font to document
   useEffect(() => {
@@ -45,6 +52,19 @@ export function Layout() {
     document.documentElement.setAttribute('data-font', font)
   }, [theme, font])
   
+  // Responsive design detection
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const width = window.innerWidth
+      setIsMobile(width < 768)
+      setIsTablet(width >= 768 && width < 1024)
+    }
+    
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
+    return () => window.removeEventListener('resize', checkScreenSize)
+  }, [])
+  
   // Memoized callbacks
   const handleEmailSelect = useCallback((emailId: string) => {
     selectEmail(emailId)
@@ -55,32 +75,24 @@ export function Layout() {
   }, [selectEmail])
   
   const handleCompose = useCallback(() => {
-    if (composerMode === 'popup') {
-      setShowComposer(true)
-    } else {
-      // Add new inline composer
-      const newComposer: Composer = {
-        id: `composer-${Date.now()}`,
-        mode: 'compose',
-        isMinimized: false,
-      }
-      setComposers(prev => [...prev, newComposer])
+    // Add new inline composer
+    const newComposer: Composer = {
+      id: `composer-${Date.now()}`,
+      mode: 'compose',
+      isMinimized: false,
     }
-  }, [composerMode])
+    setComposers(prev => [...prev, newComposer])
+  }, [])
   
   const handleReply = useCallback((mode: 'reply' | 'replyAll' | 'forward', replyTo: any) => {
-    if (composerMode === 'popup') {
-      // Will be handled by MessageView component
-    } else {
-      const newComposer: Composer = {
-        id: `composer-${Date.now()}`,
-        mode,
-        replyTo,
-        isMinimized: false,
-      }
-      setComposers(prev => [...prev, newComposer])
+    const newComposer: Composer = {
+      id: `composer-${Date.now()}`,
+      mode,
+      replyTo,
+      isMinimized: false,
     }
-  }, [composerMode])
+    setComposers(prev => [...prev, newComposer])
+  }, [])
   
   const handleCloseComposer = useCallback((id: string) => {
     setComposers(composers => composers.filter(c => c.id !== id))
@@ -105,8 +117,8 @@ export function Layout() {
         handleCompose()
       }
       
-      // Escape to close all composers when using inline mode
-      if (e.key === 'Escape' && composerMode !== 'popup' && composers.length > 0) {
+      // Escape to close all composers
+      if (e.key === 'Escape' && composers.length > 0) {
         e.preventDefault()
         setComposers([])
       }
@@ -114,7 +126,7 @@ export function Layout() {
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [composerMode, composers.length, handleCompose])
+  }, [composers.length, handleCompose])
   
   return (
     <div className="h-screen flex flex-col bg-[var(--bg-primary)]">
@@ -126,24 +138,41 @@ export function Layout() {
       
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar - always visible */}
-        <MemoizedSidebar />
+        {/* Sidebar - responsive visibility */}
+        {(!isMobile || viewMode === 'column') && (
+          <ResizablePane
+            width={sidebarWidth}
+            minWidth={180}
+            maxWidth={400}
+            onResize={setSidebarWidth}
+            direction="right"
+          >
+            <MemoizedSidebar />
+          </ResizablePane>
+        )}
         
-        {/* Content area based on view mode */}
-        {viewMode === 'column' ? (
+        {/* Content area based on view mode and screen size */}
+        {viewMode === 'column' && !isMobile ? (
           <>
             {/* Column Mode: Split view */}
-            <div className="w-[400px] bg-[var(--bg-secondary)] border-r border-[var(--border-color)] overflow-hidden">
+            <ResizablePane
+              width={messageListWidth}
+              minWidth={250}
+              maxWidth={600}
+              onResize={setMessageListWidth}
+              direction="right"
+              className="bg-[var(--bg-secondary)] border-r border-[var(--border-color)]"
+            >
               <MemoizedMessageList 
                 onSelectEmail={handleEmailSelect}
               />
-            </div>
+            </ResizablePane>
             
             {/* Email view area */}
             <div className="flex-1 bg-[var(--bg-primary)] overflow-hidden relative">
               {selectedEmailId ? (
                 <MemoizedMessageView 
-                  onReply={composerMode === 'inline' ? handleReply : undefined} 
+                  onReply={handleReply} 
                 />
               ) : (
                 <div className="h-full flex items-center justify-center">
@@ -166,14 +195,14 @@ export function Layout() {
           </>
         ) : (
           <>
-            {/* Row Mode: Single area that switches between list and email */}
+            {/* Row Mode or Mobile: Single area that switches between list and email */}
             <div className="flex-1 bg-[var(--bg-secondary)] overflow-hidden relative">
               {selectedEmailId ? (
                 // Show email view in the same space
                 <div className="h-full bg-[var(--bg-primary)]">
                   <MemoizedMessageView 
                     onClose={handleCloseEmail} 
-                    onReply={composerMode === 'inline' ? handleReply : undefined}
+                    onReply={handleReply}
                   />
                 </div>
               ) : (
@@ -196,18 +225,14 @@ export function Layout() {
         )}
       </div>
       
-      {/* Popup Composer Modal */}
-      {showComposer && composerMode === 'popup' && (
-        <MessageComposer onClose={() => setShowComposer(false)} />
-      )}
-      
-      {/* Inline Composers */}
-      {composerMode === 'inline' && composers.map((composer, index) => (
+      {/* Inline Composers - responsive positioning */}
+      {composers.map((composer, index) => (
         <div
           key={composer.id}
           style={{
             bottom: composer.isMinimized ? `${index * 50}px` : `${index * 100}px`,
-            right: `${(index * 20) + 16}px`,
+            right: isMobile ? '8px' : `${(index * 20) + 16}px`,
+            left: isMobile ? '8px' : 'auto',
             zIndex: 100 + index,
           }}
           className="fixed"
@@ -218,25 +243,10 @@ export function Layout() {
             isMinimized={composer.isMinimized}
             replyTo={composer.replyTo}
             mode={composer.mode}
+            isMobile={isMobile}
           />
         </div>
-      ))}
-      
-      {/* Facebook-style chat heads (future implementation) */}
-      {composerMode === 'facebook' && composers.length > 0 && (
-        <div className="fixed bottom-4 right-4 flex flex-col gap-2">
-          {composers.map((composer) => (
-            <div
-              key={composer.id}
-              className="w-14 h-14 bg-[var(--primary-color)] rounded-full flex items-center justify-center text-white font-bold cursor-pointer shadow-lg hover:scale-110 transition-transform"
-              onClick={() => handleMinimizeComposer(composer.id)}
-              title={composer.mode === 'compose' ? 'New Message' : composer.replyTo?.subject}
-            >
-              <div className="i-lucide:message-circle text-xl" />
-            </div>
-          ))}
-        </div>
-      )}
+      ))
     </div>
   )
 }

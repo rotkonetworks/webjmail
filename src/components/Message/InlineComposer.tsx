@@ -16,6 +16,7 @@ interface InlineComposerProps {
     cc?: Array<{ name: string | null; email: string }>
   }
   mode?: 'compose' | 'reply' | 'replyAll' | 'forward'
+  isMobile?: boolean
 }
 
 export function InlineComposer({ 
@@ -23,7 +24,8 @@ export function InlineComposer({
   onMinimize, 
   isMinimized = false,
   replyTo, 
-  mode = 'compose' 
+  mode = 'compose',
+  isMobile = false 
 }: InlineComposerProps) {
   const session = useAuthStore((state) => state.session)
   const sendEmail = useSendEmail()
@@ -133,7 +135,7 @@ export function InlineComposer({
   
   if (isMinimized) {
     return (
-      <div className="fixed bottom-0 right-4 bg-[var(--bg-secondary)] rounded-t-lg shadow-lg border border-[var(--border-color)] w-80">
+      <div className={`fixed bottom-0 ${isMobile ? 'left-2 right-2' : 'right-4 w-80'} bg-[var(--bg-secondary)] rounded-t-lg shadow-lg border border-[var(--border-color)]`}>
         <div className="flex items-center justify-between p-3 cursor-pointer" onClick={onMinimize}>
           <div className="flex items-center gap-2">
             <div className="i-lucide:edit-3 text-[var(--text-secondary)]" />
@@ -167,7 +169,7 @@ export function InlineComposer({
   }
   
   return (
-    <div className="fixed bottom-0 right-4 bg-[var(--bg-secondary)] rounded-t-lg shadow-2xl border border-[var(--border-color)] w-[500px] max-h-[80vh] flex flex-col">
+    <div className={`fixed bottom-0 ${isMobile ? 'left-2 right-2' : 'right-4 w-[500px]'} bg-[var(--bg-secondary)] rounded-t-lg shadow-2xl border border-[var(--border-color)] max-h-[80vh] flex flex-col`}>
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-[var(--border-color)]">
         <h3 className="text-sm font-semibold text-[var(--text-primary)]">
