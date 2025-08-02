@@ -1,7 +1,6 @@
-// src/components/Message/MessageList.tsx - Updated with refresh indicators
+// src/components/Message/MessageList.tsx - Simplified without offline-first
 import React, { useMemo, useEffect, useRef, useState } from 'react'
 import { useEmails, useEmailSearch } from '../../hooks/useJMAP'
-import { useOfflineEmails, useOfflineSearch } from '../../hooks/useIndexedDB'
 import { useMailStore } from '../../stores/mailStore'
 import { format, isToday, isYesterday } from 'date-fns'
 import DOMPurify from 'dompurify'
@@ -15,28 +14,22 @@ interface MessageListProps {
 export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }: MessageListProps) {
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
 
-  // Use offline-first email loading
-  const { data: offlineData, isLoading: isOfflineLoading, refetch: refetchOffline } = useOfflineEmails(selectedMailboxId)
-
-  // Fallback to online for infinite scroll if needed
+  // Use online emails directly
   const {
-    emails: onlineEmails,
+    emails,
     isFetchingNextPage,
     hasMore,
-    total: onlineTotal,
+    total,
     fetchNextPage,
-    refetch: refetchOnline,
-    isLoading: isOnlineLoading,
-    isFetching: isOnlineFetching,
+    refetch,
+    isLoading,
+    isFetching,
   } = useEmails(selectedMailboxId)
 
   const [searchDebounce, setSearchDebounce] = useState('')
-  const [showServerSearch, setShowServerSearch] = useState(false)
-  const [lastRefreshTime, setLastRefreshTime] = useState(Date.now())
-
+  
   // Track if we're loading/refreshing
-  const isLoading = isOfflineLoading || isOnlineLoading
-  const isRefreshing = isOnlineFetching && !isFetchingNextPage
+  const isRefreshing = isFetching && !isFetchingNextPage
   
   // Debounce search query
   useEffect(() => {
@@ -46,35 +39,20 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     return () => clearTimeout(timer)
   }, [searchQuery])
 
-  // Offline search first
-  const { data: offlineSearchResults } = useOfflineSearch(
-    searchDebounce,
-    searchDebounce.length > 2 && !showServerSearch
-  )
-
-  // Server search as fallback
+  // Server search
   const { data: serverSearchResults, isFetching: isSearching } = useEmailSearch(
     searchDebounce,
-    showServerSearch
+    searchDebounce.length > 2
   )
-
-  // Force refetch from server if no offline data
-  useEffect(() => {
-    if (!offlineData?.emails?.length && selectedMailboxId && !isLoading) {
-      console.log('[MessageList] No offline data, fetching from server')
-      refetchOffline()
-      fetchNextPage()
-    }
-  }, [selectedMailboxId, offlineData, isLoading, refetchOffline, fetchNextPage])
 
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
   const listRef = useRef<HTMLDivElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
 
-  // Intersection observer for infinite scroll with improved cleanup
+  // Intersection observer for infinite scroll
   useEffect(() => {
-    if (!loadMoreRef.current || !hasMore || showServerSearch || isFetchingNextPage) return
+    if (!loadMoreRef.current || !hasMore || isFetchingNextPage || searchDebounce) return
 
     const element = loadMoreRef.current
     const observer = new IntersectionObserver(
@@ -95,7 +73,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     return () => {
       observer.disconnect()
     }
-  }, [hasMore, isFetchingNextPage, fetchNextPage, showServerSearch])
+  }, [hasMore, isFetchingNextPage, fetchNextPage, searchDebounce])
 
   // Handle Enter key
   useEffect(() => {
@@ -113,56 +91,16 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     }
   }, [selectedEmailId, onSelectEmail])
 
-  // Determine data source with offline-first approach
-  const emails = offlineData?.emails || onlineEmails || []
-  const total = offlineData?.total || onlineTotal || 0
-  const fromCache = offlineData?.fromCache || false
-
-  // Filter emails with offline-first search
+  // Filter emails
   const filteredEmails = useMemo(() => {
     // Use search results if searching
-    if (searchDebounce) {
-      if (showServerSearch && serverSearchResults) {
-        return serverSearchResults
-      } else if (offlineSearchResults) {
-        return offlineSearchResults
-      } else if (!showServerSearch) {
-        // Local filter as fallback
-        const query = searchDebounce.toLowerCase()
-        return emails.filter(
-          (email) =>
-            email.subject?.toLowerCase().includes(query) ||
-            email.from?.[0]?.email?.toLowerCase().includes(query) ||
-            email.from?.[0]?.name?.toLowerCase().includes(query) ||
-            email.preview?.toLowerCase().includes(query)
-        )
-      }
+    if (searchDebounce && serverSearchResults) {
+      return serverSearchResults
     }
 
     // Return all emails if not searching
-    return emails.sort(
-      (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-    )
-  }, [emails, offlineSearchResults, serverSearchResults, searchDebounce, showServerSearch])
-
-  // Auto-enable server search if local results are insufficient
-  useEffect(() => {
-    if (searchDebounce && filteredEmails.length === 0 && !showServerSearch && !isLoading) {
-      const timer = setTimeout(() => {
-        setShowServerSearch(true)
-      }, 500)
-      return () => clearTimeout(timer)
-    } else if (!searchDebounce) {
-      setShowServerSearch(false)
-    }
-  }, [searchDebounce, filteredEmails.length, showServerSearch, isLoading])
-
-  // Update last refresh time when data changes
-  useEffect(() => {
-    if (filteredEmails.length > 0) {
-      setLastRefreshTime(Date.now())
-    }
-  }, [filteredEmails.length])
+    return emails
+  }, [emails, serverSearchResults, searchDebounce])
 
   const formatEmailDate = (dateString: string): string => {
     const date = new Date(dateString)
@@ -214,8 +152,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
 
   const handleRefresh = () => {
     console.log('[MessageList] Manual refresh triggered')
-    refetchOffline()
-    refetchOnline()
+    refetch()
   }
 
   if (!selectedMailboxId) {
@@ -245,11 +182,6 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
           <p className="text-[var(--text-secondary)]">
             {searchQuery ? 'No messages found' : 'No messages in this mailbox'}
           </p>
-          {searchQuery && (
-            <p className="text-sm text-[var(--text-tertiary)] mt-1">
-              {showServerSearch ? 'No results on server' : 'Searching server...'}
-            </p>
-          )}
           <button
             onClick={handleRefresh}
             className="mt-4 px-4 py-2 text-sm bg-[var(--primary-color)] text-white rounded-lg hover:bg-[var(--primary-hover)] transition-colors"
@@ -261,13 +193,6 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     )
   }
 
-  const timeSinceRefresh = Math.floor((Date.now() - lastRefreshTime) / 1000)
-  const refreshText = timeSinceRefresh < 60 
-    ? 'Just updated' 
-    : timeSinceRefresh < 3600 
-    ? `${Math.floor(timeSinceRefresh / 60)}m ago` 
-    : `${Math.floor(timeSinceRefresh / 3600)}h ago`
-
   return (
     <div className="h-full overflow-y-auto" ref={listRef} tabIndex={0}>
       {/* Header */}
@@ -276,42 +201,23 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
           {isRefreshing && (
             <div className="i-eos-icons:loading animate-spin inline mr-2" />
           )}
-          {showServerSearch ? (
+          {searchDebounce ? (
             <>
               <div className="i-lucide:search inline mr-1" />
               {isSearching ? 'Searching...' : `${filteredEmails.length} results`}
             </>
-          ) : searchDebounce && offlineSearchResults ? (
-            <>
-              <div className="i-lucide:database inline mr-1" />
-              {filteredEmails.length} offline results
-            </>
           ) : total > 0 ? (
             <>
-              {fromCache && <div className="i-lucide:database inline mr-1" title="From cache" />}
               {filteredEmails.length} of {total} {total === 1 ? 'conversation' : 'conversations'}
             </>
           ) : (
             <>
-              {fromCache && <div className="i-lucide:database inline mr-1" title="From cache" />}
               {filteredEmails.length}{' '}
               {filteredEmails.length === 1 ? 'conversation' : 'conversations'}
             </>
           )}
         </span>
         <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-          <span>{refreshText}</span>
-          {showServerSearch && (
-            <button
-              className="text-xs text-[var(--primary-color)] hover:underline"
-              onClick={() => {
-                setShowServerSearch(false)
-                setSearchDebounce('')
-              }}
-            >
-              Clear search
-            </button>
-          )}
           <button
             className="p-1 hover:bg-white/10 rounded transition-colors"
             title="Refresh"
@@ -335,7 +241,9 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
             key={email.id}
             onClick={() => {
               selectEmail(email.id)
-              onSelectEmail?.(email.id)
+              if (viewMode === 'row') {
+                onSelectEmail?.(email.id)
+              }
             }}
             className={`
               email-item cursor-pointer
@@ -416,12 +324,6 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                       Attachment
                     </span>
                   )}
-                  {showServerSearch && (
-                    <span className="label label-green">
-                      <div className="i-lucide:search inline w-3 h-3 mr-1" />
-                      Server result
-                    </span>
-                  )}
                 </div>
               </div>
 
@@ -440,7 +342,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       })}
 
       {/* Load more */}
-      {!showServerSearch && emails.length > 0 && (
+      {!searchDebounce && emails.length > 0 && (
         <div ref={loadMoreRef} className="p-4 text-center">
           {hasMore ? (
             isFetchingNextPage ? (

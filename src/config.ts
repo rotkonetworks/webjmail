@@ -63,28 +63,20 @@ export const config = {
 }
 
 // Server presets for quick switching
-export const serverPresets = import.meta.env.DEV
-  ? [
-      {
-        name: 'Rotko Mail (Dev Proxy)',
-        url: '/.well-known/jmap',
-        description: 'Uses Vite proxy to avoid CORS',
-      },
-      {
-        name: 'Rotko Mail (Direct)',
-        url: 'https://mail.rotko.net/.well-known/jmap',
-        description: 'direct connection (may have CORS issues)',
-      },
-      {
-        name: 'Local Stalwart',
-        url: 'http://localhost:8080/.well-known/jmap',
-        description: 'local development server',
-      },
-    ]
-  : [
-      {
-        name: 'Rotko Webmail',
-        url: 'https://mail.rotko.net/.well-known/jmap',
-        description: 'Stalwart server',
-      },
-    ]
+export const serverPresets = [
+  {
+    name: 'Rotko Mail (Dev Proxy)',
+    url: '/.well-known/jmap',
+    description: 'Uses Vite proxy to avoid CORS',
+  },
+  {
+    name: 'Rotko Mail (Direct)',
+    url: 'https://mail.rotko.net/.well-known/jmap',
+    description: 'Direct connection (may have CORS issues)',
+  },
+  {
+    name: 'Local Stalwart',
+    url: 'http://localhost:8080/.well-known/jmap',
+    description: 'Local development server',
+  },
+]

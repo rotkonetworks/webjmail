@@ -164,7 +164,7 @@ export class JMAPClient {
     }
   }
 
-  // Fixed EventSource implementation
+  // Fixed EventSource implementation with authentication workaround
   createEventSource(types: string[] = ['*']): EventSource {
     if (!this.session) throw new Error('Not authenticated')
 
@@ -185,28 +185,20 @@ export class JMAPClient {
       try {
         const urlObj = new URL(eventSourceUrl, this.baseUrl || window.location.origin)
         
-        // For EventSource, we need to handle auth differently since it doesn't support custom headers
-        if (urlObj.hostname === 'mail.rotko.net' || urlObj.hostname === 'localhost') {
-          // Method 1: Try using Basic auth in URL (if server supports it)
-          const authString = this.accessToken.replace('Basic ', '')
-          const [username, password] = atob(authString).split(':')
-          
-          // Build URL with auth - some servers support this
-          eventSourceUrl = `/eventsource?types=${types.join(',')}&closeafter=no&ping=30&auth=${encodeURIComponent(authString)}`
-          
-          console.log('[EventSource] Using proxied EventSource URL:', eventSourceUrl)
-        }
+        // For EventSource in dev, we need to pass auth as a query parameter
+        // because EventSource doesn't support custom headers
+        const authToken = this.accessToken.replace('Basic ', '')
+        urlObj.searchParams.set('authorization', authToken)
+        
+        // Use the proxied path with query parameters
+        eventSourceUrl = urlObj.pathname + urlObj.search
+        console.log('[EventSource] Using proxied EventSource URL:', eventSourceUrl)
       } catch (e) {
         console.error('[EventSource] URL processing error:', e)
       }
-    } else {
-      // In production, try to append auth as query parameter
-      const authString = this.accessToken.replace('Basic ', '')
-      const separator = eventSourceUrl.includes('?') ? '&' : '?'
-      eventSourceUrl = `${eventSourceUrl}${separator}authorization=${encodeURIComponent('Basic ' + authString)}`
     }
 
-    console.log('[EventSource] Final URL:', eventSourceUrl.split('?')[0] + '?[params]')
+    console.log('[EventSource] Final URL:', eventSourceUrl)
 
     // Create the EventSource
     const eventSource = new EventSource(eventSourceUrl)
