@@ -1,20 +1,40 @@
 // src/components/Message/MessageList.tsx
-import React, { useMemo, useEffect, useRef, useState } from 'react'
+import React, { useMemo, useEffect, useRef, useState, memo, useCallback } from 'react'
 import { useEmails, useEmailSearch, useDeleteEmail, usePrimaryAccountId } from '../../hooks'
 import { useMailStore } from '../../stores/mailStore'
+import { useSearchStore } from '../../stores/searchStore'
 import { format, isToday, isYesterday } from 'date-fns'
 import DOMPurify from 'dompurify'
 
 interface MessageListProps {
-  searchQuery: string
   viewMode?: 'column' | 'row'
   onSelectEmail?: (emailId: string) => void
 }
 
-export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }: MessageListProps) {
+// Custom hook for debounced value
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value)
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value)
+    }, delay)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [value, delay])
+
+  return debouncedValue
+}
+
+export const MessageList = memo(function MessageList({ viewMode = 'column', onSelectEmail }: MessageListProps) {
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
   const accountId = usePrimaryAccountId()
   const deleteEmailMutation = useDeleteEmail()
+  
+  // Get search query from store
+  const searchQuery = useSearchStore((state) => state.query)
   
   // Use online emails directly
   const {
@@ -28,18 +48,11 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     isFetching,
   } = useEmails(selectedMailboxId)
   
-  const [searchDebounce, setSearchDebounce] = useState('')
-  
   // Track if we're loading/refreshing
   const isRefreshing = isFetching && !isFetchingNextPage
   
   // Debounce search query
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchDebounce(searchQuery)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [searchQuery])
+  const searchDebounce = useDebouncedValue(searchQuery, 300)
   
   // Server search
   const { data: serverSearchResults, isFetching: isSearching } = useEmailSearch(
@@ -86,6 +99,38 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     }
   }, [hasMore, isFetchingNextPage, fetchNextPage, searchDebounce])
   
+  // Memoized delete handler
+  const handleDeleteEmail = useCallback(async (emailId: string) => {
+    if (!accountId) return
+    
+    const email = emails.find(e => e.id === emailId)
+    if (!email) return
+    
+    // Optional: Add confirmation for non-spam emails
+    const isSpam = email.keywords.$junk || false
+    if (!isSpam && !confirm('Delete this message?')) {
+      return
+    }
+    
+    try {
+      await deleteEmailMutation.mutateAsync({ accountId, emailId })
+      
+      // Select next email after deletion
+      const currentIndex = filteredEmails.findIndex(e => e.id === emailId)
+      if (currentIndex !== -1 && filteredEmails.length > 1) {
+        const nextIndex = currentIndex < filteredEmails.length - 1 ? currentIndex : currentIndex - 1
+        const nextEmail = filteredEmails[nextIndex]
+        if (nextEmail && nextEmail.id !== emailId) {
+          selectEmail(nextEmail.id)
+        }
+      } else {
+        selectEmail(null)
+      }
+    } catch (error) {
+      console.error('Failed to delete email:', error)
+    }
+  }, [accountId, emails, filteredEmails, deleteEmailMutation, selectEmail])
+  
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -126,29 +171,29 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       listElement.addEventListener('keydown', handleKeyDown)
       return () => listElement.removeEventListener('keydown', handleKeyDown)
     }
-  }, [selectedEmailId, onSelectEmail, filteredEmails, accountId, selectEmail])
+  }, [selectedEmailId, onSelectEmail, filteredEmails, accountId, selectEmail, handleDeleteEmail])
   
-  const formatEmailDate = (dateString: string): string => {
+  const formatEmailDate = useCallback((dateString: string): string => {
     const date = new Date(dateString)
     if (isToday(date)) return format(date, 'HH:mm')
     if (isYesterday(date)) return 'Yesterday'
     return format(date, 'MMM d')
-  }
+  }, [])
   
   // Security: Escape regex special characters to prevent ReDoS attacks
-  const escapeRegex = (str: string): string => {
+  const escapeRegex = useCallback((str: string): string => {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  }
+  }, [])
   
   // Security: Sanitize and validate input to prevent XSS and injection attacks
-  const sanitizeText = (text: string): string => {
+  const sanitizeText = useCallback((text: string): string => {
     if (!text || typeof text !== 'string') return ''
     // Limit length to prevent DoS
     if (text.length > 10000) text = text.substring(0, 10000)
     return DOMPurify.sanitize(text, { ALLOWED_TAGS: [] })
-  }
+  }, [])
   
-  const highlightText = (text: string, query: string) => {
+  const highlightText = useCallback((text: string, query: string) => {
     if (!query || !text) return sanitizeText(text)
     // Security: Validate and limit query length
     if (query.length > 100) return sanitizeText(text)
@@ -172,43 +217,26 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       console.warn('Regex highlighting failed:', error)
       return sanitizedText
     }
-  }
+  }, [sanitizeText, escapeRegex])
   
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     console.log('[MessageList] Manual refresh triggered')
     refetch()
-  }
+  }, [refetch])
   
-  const handleDeleteEmail = async (emailId: string) => {
-    if (!accountId) return
-    
-    const email = emails.find(e => e.id === emailId)
-    if (!email) return
-    
-    // Optional: Add confirmation for non-spam emails
-    const isSpam = email.keywords.$junk || false
-    if (!isSpam && !confirm('Delete this message?')) {
-      return
+  // Memoized click handlers
+  const handleEmailClick = useCallback((emailId: string) => {
+    selectEmail(emailId)
+    if (viewMode === 'row') {
+      onSelectEmail?.(emailId)
     }
-    
-    try {
-      await deleteEmailMutation.mutateAsync({ accountId, emailId })
-      
-      // Select next email after deletion
-      const currentIndex = filteredEmails.findIndex(e => e.id === emailId)
-      if (currentIndex !== -1 && filteredEmails.length > 1) {
-        const nextIndex = currentIndex < filteredEmails.length - 1 ? currentIndex : currentIndex - 1
-        const nextEmail = filteredEmails[nextIndex]
-        if (nextEmail && nextEmail.id !== emailId) {
-          selectEmail(nextEmail.id)
-        }
-      } else {
-        selectEmail(null)
-      }
-    } catch (error) {
-      console.error('Failed to delete email:', error)
+  }, [selectEmail, viewMode, onSelectEmail])
+  
+  const handleEmailDoubleClick = useCallback((emailId: string) => {
+    if (viewMode === 'column' && emailId === selectedEmailId) {
+      onSelectEmail?.(emailId)
     }
-  }
+  }, [viewMode, selectedEmailId, onSelectEmail])
   
   if (!selectedMailboxId) {
     return (
@@ -295,17 +323,8 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
         return (
           <div
             key={email.id}
-            onClick={() => {
-              selectEmail(email.id)
-              if (viewMode === 'row') {
-                onSelectEmail?.(email.id)
-              }
-            }}
-            onDoubleClick={() => {
-              if (viewMode === 'column' && email.id === selectedEmailId) {
-                onSelectEmail?.(email.id)
-              }
-            }}
+            onClick={() => handleEmailClick(email.id)}
+            onDoubleClick={() => handleEmailDoubleClick(email.id)}
             className={`
               email-item cursor-pointer relative group
               ${isSelected ? 'selected' : ''}
@@ -457,4 +476,4 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       )}
     </div>
   )
-}
+})

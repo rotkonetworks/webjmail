@@ -6,6 +6,7 @@ import { db } from '../db'
 import { syncManager } from '../db/sync'
 import { useAuthStore } from '../stores/authStore'
 import { usePrimaryAccountId } from './usePrimaryAccountId'
+import { jmapClient } from '../api/jmap'
 
 function useCurrentUserId(): string | null {
   const session = useAuthStore((state) => state.session)

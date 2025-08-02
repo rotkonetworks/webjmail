@@ -1,5 +1,5 @@
 // src/components/Layout/Layout.tsx
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, memo } from 'react'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { MessageList } from '../Message/MessageList'
@@ -17,6 +17,12 @@ interface Composer {
   isMinimized: boolean
 }
 
+// Memoize child components
+const MemoizedSidebar = memo(Sidebar)
+const MemoizedMessageList = memo(MessageList)
+const MemoizedMessageView = memo(MessageView)
+const MemoizedSettingsPanel = memo(SettingsPanel)
+
 export function Layout() {
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
@@ -27,7 +33,6 @@ export function Layout() {
   
   const [showComposer, setShowComposer] = useState(false)
   const [composers, setComposers] = useState<Composer[]>([])
-  const [searchQuery, setSearchQuery] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   
   // Apply theme and font to document
@@ -40,15 +45,16 @@ export function Layout() {
     document.documentElement.setAttribute('data-font', font)
   }, [theme, font])
   
-  const handleEmailSelect = (emailId: string) => {
+  // Memoized callbacks
+  const handleEmailSelect = useCallback((emailId: string) => {
     selectEmail(emailId)
-  }
+  }, [selectEmail])
   
-  const handleCloseEmail = () => {
+  const handleCloseEmail = useCallback(() => {
     selectEmail(null)
-  }
+  }, [selectEmail])
   
-  const handleCompose = () => {
+  const handleCompose = useCallback(() => {
     if (composerMode === 'popup') {
       setShowComposer(true)
     } else {
@@ -58,11 +64,11 @@ export function Layout() {
         mode: 'compose',
         isMinimized: false,
       }
-      setComposers([...composers, newComposer])
+      setComposers(prev => [...prev, newComposer])
     }
-  }
+  }, [composerMode])
   
-  const handleReply = (mode: 'reply' | 'replyAll' | 'forward', replyTo: any) => {
+  const handleReply = useCallback((mode: 'reply' | 'replyAll' | 'forward', replyTo: any) => {
     if (composerMode === 'popup') {
       // Will be handled by MessageView component
     } else {
@@ -72,19 +78,23 @@ export function Layout() {
         replyTo,
         isMinimized: false,
       }
-      setComposers([...composers, newComposer])
+      setComposers(prev => [...prev, newComposer])
     }
-  }
+  }, [composerMode])
   
-  const handleCloseComposer = (id: string) => {
-    setComposers(composers.filter(c => c.id !== id))
-  }
+  const handleCloseComposer = useCallback((id: string) => {
+    setComposers(composers => composers.filter(c => c.id !== id))
+  }, [])
   
-  const handleMinimizeComposer = (id: string) => {
-    setComposers(composers.map(c => 
+  const handleMinimizeComposer = useCallback((id: string) => {
+    setComposers(composers => composers.map(c => 
       c.id === id ? { ...c, isMinimized: !c.isMinimized } : c
     ))
-  }
+  }, [])
+  
+  const toggleSettings = useCallback(() => {
+    setShowSettings(prev => !prev)
+  }, [])
   
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -104,35 +114,37 @@ export function Layout() {
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [composerMode, composers])
+  }, [composerMode, composers.length, handleCompose])
   
   return (
     <div className="h-screen flex flex-col bg-[var(--bg-primary)]">
       {/* Header */}
       <Header
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
         onCompose={handleCompose}
-        onSettings={() => setShowSettings(!showSettings)}
+        onSettings={toggleSettings}
       />
       
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar - always visible */}
-        <Sidebar />
+        <MemoizedSidebar />
         
         {/* Content area based on view mode */}
         {viewMode === 'column' ? (
           <>
             {/* Column Mode: Split view */}
             <div className="w-[400px] bg-[var(--bg-secondary)] border-r border-[var(--border-color)] overflow-hidden">
-              <MessageList searchQuery={searchQuery} onSelectEmail={handleEmailSelect} />
+              <MemoizedMessageList 
+                onSelectEmail={handleEmailSelect}
+              />
             </div>
             
             {/* Email view area */}
             <div className="flex-1 bg-[var(--bg-primary)] overflow-hidden relative">
               {selectedEmailId ? (
-                <MessageView onReply={composerMode === 'inline' ? handleReply : undefined} />
+                <MemoizedMessageView 
+                  onReply={composerMode === 'inline' ? handleReply : undefined} 
+                />
               ) : (
                 <div className="h-full flex items-center justify-center">
                   <div className="empty-state">
@@ -145,7 +157,10 @@ export function Layout() {
               
               {/* Settings Panel overlays on right */}
               {showSettings && (
-                <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+                <MemoizedSettingsPanel 
+                  isOpen={showSettings} 
+                  onClose={() => setShowSettings(false)} 
+                />
               )}
             </div>
           </>
@@ -156,15 +171,14 @@ export function Layout() {
               {selectedEmailId ? (
                 // Show email view in the same space
                 <div className="h-full bg-[var(--bg-primary)]">
-                  <MessageView 
+                  <MemoizedMessageView 
                     onClose={handleCloseEmail} 
                     onReply={composerMode === 'inline' ? handleReply : undefined}
                   />
                 </div>
               ) : (
                 // Show message list
-                <MessageList
-                  searchQuery={searchQuery}
+                <MemoizedMessageList
                   viewMode="row"
                   onSelectEmail={handleEmailSelect}
                 />
@@ -172,7 +186,10 @@ export function Layout() {
               
               {/* Settings Panel overlays on right */}
               {showSettings && (
-                <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+                <MemoizedSettingsPanel 
+                  isOpen={showSettings} 
+                  onClose={() => setShowSettings(false)} 
+                />
               )}
             </div>
           </>

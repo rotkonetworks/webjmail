@@ -1,21 +1,24 @@
-// src/components/Layout/Header.tsx - Updated with manual refresh
-import React, { useRef, useEffect, useState } from 'react'
+// src/components/Layout/Header.tsx - Updated with search store
+import React, { useRef, useEffect, useState, memo, useCallback } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useManualRefresh } from '../../hooks'
+import { useSearchStore } from '../../stores/searchStore'
 import { config } from '../../config'
 
 interface HeaderProps {
-  searchQuery: string
-  onSearchChange: (query: string) => void
   onCompose: () => void
   onSettings: () => void
 }
 
-export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: HeaderProps) {
+export const Header = memo(function Header({ onCompose, onSettings }: HeaderProps) {
   const session = useAuthStore((state) => state.session)
   const searchRef = useRef<HTMLInputElement>(null)
   const manualRefresh = useManualRefresh()
   const [isRefreshing, setIsRefreshing] = useState(false)
+  
+  // Use search store
+  const searchQuery = useSearchStore((state) => state.query)
+  const setSearchQuery = useSearchStore((state) => state.setQuery)
 
   // Focus search on Cmd/Ctrl + K
   useEffect(() => {
@@ -36,7 +39,7 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const handleManualRefresh = async () => {
+  const handleManualRefresh = useCallback(async () => {
     setIsRefreshing(true)
     console.log('[Header] Manual refresh triggered')
     manualRefresh()
@@ -45,7 +48,15 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
     setTimeout(() => {
       setIsRefreshing(false)
     }, 1000)
-  }
+  }, [manualRefresh])
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value)
+  }, [setSearchQuery])
+
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery('')
+  }, [setSearchQuery])
 
   const username = session?.username || 'User'
   const firstLetter = username.charAt(0).toUpperCase()
@@ -68,13 +79,13 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
             ref={searchRef}
             type="text"
             value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={handleSearchChange}
             placeholder="Search messages... (⌘K)"
             className="search-input w-full pl-10 pr-4 py-2 rounded-lg text-sm"
           />
           {searchQuery && (
             <button
-              onClick={() => onSearchChange('')}
+              onClick={handleClearSearch}
               className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded"
             >
               <div className="i-lucide:x text-sm" />
@@ -119,4 +130,4 @@ export function Header({ searchQuery, onSearchChange, onCompose, onSettings }: H
       </div>
     </header>
   )
-}
+})
