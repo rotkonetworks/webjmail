@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { useMailboxes } from '../../hooks'
 import { useMailStore } from '../../stores/mailStore'
-import { Mailbox } from '../../api/types'
 
 interface Props {
   onSelect: () => void
@@ -67,7 +66,7 @@ export function MailboxList({ onSelect }: Props) {
       {flatMailboxes.map((mailbox, index) => (
         <div
           key={mailbox.id}
-          ref={(el) => (itemsRef.current[index] = el)}
+          ref={(el) => { if (el) itemsRef.current[index] = el }}
           className={`
             px-4 py-1 cursor-pointer flex items-center justify-between
             ${index === focusIndex ? 'bg-bright-black' : ''}

@@ -1,5 +1,5 @@
 // src/api/jmap.ts - Fixed EventSource implementation
-import { JMAPSession, Email, Mailbox, Thread, JMAPRequest, JMAPResponse } from './types'
+import { JMAPSession, Email, Mailbox, JMAPRequest, JMAPResponse } from './types'
 
 export class JMAPClient {
   private session: JMAPSession | null = null
@@ -54,7 +54,7 @@ export class JMAPClient {
         this.baseUrl = serverUrl.replace('/.well-known/jmap', '')
 
         // Validate session structure
-        if (!this.session.apiUrl) {
+        if (!this.session?.apiUrl) {
           throw new Error('Invalid session: missing apiUrl')
         }
 
@@ -150,7 +150,7 @@ export class JMAPClient {
       })
 
       // Check for method-level errors
-      for (const [method, result, id] of data.methodResponses) {
+      for (const [method, result, _id] of data.methodResponses) {
         if (method === 'error') {
           console.error('[JMAP] Method error:', result)
           throw new Error(result.description || 'JMAP method error')
@@ -204,7 +204,7 @@ export class JMAPClient {
     const eventSource = new EventSource(eventSourceUrl)
 
     // Add comprehensive logging
-    eventSource.addEventListener('open', (event) => {
+    eventSource.addEventListener('open', (event: Event) => {
       console.log('[EventSource] Connection opened successfully')
     })
 

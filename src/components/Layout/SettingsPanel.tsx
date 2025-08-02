@@ -1,5 +1,4 @@
 // src/components/Layout/SettingsPanel.tsx
-import React from 'react'
 import { useUIStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
 

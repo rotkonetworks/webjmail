@@ -1,5 +1,5 @@
 // src/components/Message/MessageList.tsx
-import React, { useMemo, useEffect, useRef, useState, memo, useCallback } from 'react'
+import { useMemo, useEffect, useRef, useState, memo, useCallback } from 'react'
 import { useEmails, useEmailSearch, useDeleteEmail, usePrimaryAccountId } from '../../hooks'
 import { useMailStore } from '../../stores/mailStore'
 import { useSearchStore } from '../../stores/searchStore'

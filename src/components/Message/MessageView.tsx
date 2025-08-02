@@ -1,5 +1,5 @@
 // src/components/Message/MessageView.tsx
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useMailStore } from '../../stores/mailStore'
 import { useUIStore } from '../../stores/uiStore'
 import {
@@ -302,7 +302,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
                 return (
                   <div
                     key={threadEmail.id}
-                    ref={(el) => el && emailRefs.current.set(threadEmail.id, el)}
+                    ref={(el) => { if (el) emailRefs.current.set(threadEmail.id, el) }}
                     className={`timeline-marker mb-6 ${isLatest ? 'slide-in' : ''}`}
                   >
                     {/* Email header */}
@@ -464,7 +464,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
             subject: email.subject,
             from: email.from || [],
             to: email.to || [],
-            cc: email.cc,
+            cc: email.cc || undefined,
           }}
           mode={composerModeLocal}
         />

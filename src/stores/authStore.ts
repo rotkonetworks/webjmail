@@ -37,10 +37,10 @@ export const useAuthStore = create<AuthState>()(
           const session = await jmapClient.authenticate(server, username, password)
           
           console.log('[AuthStore] Login successful, session:', {
-            username: session.username,
-            accounts: Object.keys(session.accounts),
-            capabilities: Object.keys(session.capabilities),
-            apiUrl: session.apiUrl,
+            username: session?.username,
+            accounts: Object.keys(session?.accounts),
+            capabilities: Object.keys(session?.capabilities),
+            apiUrl: session?.apiUrl,
           })
           
           set({

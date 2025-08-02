@@ -4,26 +4,34 @@ import { jmapClient } from '../../api/jmap'
 import { useAuthStore } from '../../stores/authStore'
 import { useMailStore } from '../../stores/mailStore'
 import { usePrimaryAccountId } from '../usePrimaryAccountId'
+import type { Email } from '../../api/types'
+
+interface EmailsResponse {
+  emails: Email[]
+  total: number
+  position: number
+}
 
 export function useEmails(mailboxId: string | null) {
   const session = useAuthStore((state) => state.session)
   const accountId = usePrimaryAccountId()
   const setEmails = useMailStore((state) => state.addEmails)
 
-  const query = useInfiniteQuery({
+  const query = useInfiniteQuery<EmailsResponse>({
     queryKey: ['emails', accountId, mailboxId],
-    queryFn: async ({ pageParam = 0 }) => {
+    queryFn: async ({ pageParam }) => {
+      const position = pageParam ?? 0
       if (!accountId || !mailboxId) return { emails: [], total: 0, position: 0 }
 
       if (import.meta.env.DEV) {
-        console.log('[useEmails] Fetching emails at position:', pageParam)
+        console.log('[useEmails] Fetching emails at position:', position)
       }
       
       const result = await jmapClient.getEmails(
         accountId,
         { inMailbox: mailboxId },
         undefined,
-        pageParam,
+        position as number,
         50
       )
 
@@ -33,7 +41,7 @@ export function useEmails(mailboxId: string | null) {
       
       return result
     },
-    getNextPageParam: (lastPage, allPages) => {
+    getNextPageParam: (lastPage: EmailsResponse, allPages: EmailsResponse[]) => {
       const loadedCount = allPages.reduce((sum, page) => sum + page.emails.length, 0)
       if (import.meta.env.DEV) {
         console.log('[useEmails] Loaded:', loadedCount, 'of', lastPage.total)
@@ -45,11 +53,10 @@ export function useEmails(mailboxId: string | null) {
       
       return loadedCount
     },
+    initialPageParam: 0,
     enabled: !!session && !!accountId && !!mailboxId,
     staleTime: 30 * 1000, // 30 seconds
     refetchInterval: 2 * 60 * 1000, // Poll every 2 minutes
-    keepPreviousData: true,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
     refetchIntervalInBackground: false,
     retry: (failureCount, error) => {
       if (error instanceof Error && error.message.includes('401')) {

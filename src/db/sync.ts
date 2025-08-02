@@ -68,6 +68,7 @@ export class SyncManager {
     const syncStateId = `user:${this.currentUserId}:mailbox:${mailboxId}`
     const syncState = await db.syncStates.get(syncStateId)
 
+    if (syncState) return syncState
     const {
       emails,
       total,
@@ -366,7 +367,7 @@ export class SyncManager {
    connect()
  }
 
- private async handleEmailChanges(accountId: string, newState: string) {
+ private async handleEmailChanges(accountId: string, _newState: string) {
    if (!this.currentUserId) return
 
    // Get changes since last state
@@ -374,7 +375,7 @@ export class SyncManager {
    if (!syncState) return
 
    try {
-     const changes = await jmapClient.request([
+     const _changes = await jmapClient.request([
        [
          'Email/changes',
          {

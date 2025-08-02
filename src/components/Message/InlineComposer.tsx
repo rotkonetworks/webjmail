@@ -1,5 +1,5 @@
 // src/components/Message/InlineComposer.tsx
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useSendEmail } from '../../hooks'
 import { config } from '../../config'

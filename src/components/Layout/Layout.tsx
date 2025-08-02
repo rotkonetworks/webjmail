@@ -1,5 +1,5 @@
 // src/components/Layout/Layout.tsx
-import React, { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { MessageList } from '../Message/MessageList'

@@ -266,7 +266,7 @@ export interface ChangesRequest {
   maxChanges?: number
 }
 
-export interface ChangesResponse<T> {
+export interface ChangesResponse<_T> {
   accountId: string
   oldState: string
   newState: string
