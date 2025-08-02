@@ -47,48 +47,48 @@ export function MessageItem({ email, isSelected, onClick }: MessageItemProps) {
   return (
     <div
       className={`
-        px-4 py-3 border-b border-gray-100 cursor-pointer transition-colors
-        hover:bg-gray-50 relative
-        ${isSelected ? 'bg-blue-50 border-l-4 border-l-primary' : ''}
+        email-item px-4 py-3 sm:py-2 border-b border-[var(--border-color)] cursor-pointer transition-colors
+        hover:bg-[var(--bg-tertiary)] relative touch-friendly
+        ${isSelected ? 'bg-[var(--bg-tertiary)] border-l-4 border-l-[var(--primary-color)]' : ''}
         ${isUnread ? 'font-semibold' : ''}
       `}
       onClick={onClick}
     >
       {/* Unread indicator */}
       {isUnread && (
-        <div className="absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
+        <div className="unread-dot absolute left-2 top-1/2 -translate-y-1/2" />
       )}
 
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-3 md:gap-2">
         <div className="flex-1 min-w-0">
           {/* Sender and Time */}
           <div className="flex items-center justify-between mb-1">
-            <span className={`text-sm truncate ${isUnread ? 'text-gray-900' : 'text-gray-700'}`}>
+            <span className={`text-sm md:text-sm truncate ${isUnread ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
               {senderName}
             </span>
             <span
-              className={`text-xs flex-shrink-0 ${isUnread ? 'text-primary' : 'text-gray-500'}`}
+              className={`text-xs flex-shrink-0 ${isUnread ? 'text-[var(--primary-color)]' : 'text-[var(--text-tertiary)]'}`}
             >
               {formatDate(email.receivedAt)}
             </span>
           </div>
 
           {/* Subject */}
-          <div className={`text-sm mb-1 truncate ${isUnread ? 'text-gray-900' : 'text-gray-800'}`}>
+          <div className={`text-sm md:text-sm mb-1 truncate ${isUnread ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
             {email.subject || '(no subject)'}
           </div>
 
           {/* Preview */}
-          <div className="text-sm text-gray-600 truncate">{email.preview}</div>
+          <div className="text-sm text-[var(--text-tertiary)] truncate">{email.preview}</div>
         </div>
 
         {/* Icons */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-2 md:gap-1 flex-shrink-0">
           {email.hasAttachment && (
-            <div className="i-lucide:paperclip text-gray-400 text-sm" title="Has attachment" />
+            <div className="i-lucide:paperclip text-[var(--text-tertiary)] text-base md:text-sm" title="Has attachment" />
           )}
           {isFlagged && (
-            <div className="i-lucide:star-fill text-yellow-500 text-sm" title="Flagged" />
+            <div className="i-lucide:star-fill text-[var(--accent-yellow)] text-base md:text-sm" title="Flagged" />
           )}
         </div>
       </div>

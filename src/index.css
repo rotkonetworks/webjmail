@@ -235,6 +235,55 @@ body {
   border-left-color: var(--primary-color);
 }
 
+/* Mobile optimizations */
+@media (max-width: 767px) {
+  /* Increase touch target sizes */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Better text sizes for mobile */
+  body {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  /* Touch-friendly spacing */
+  .email-item {
+    padding: 16px !important;
+  }
+  
+  /* Mobile header adjustments */
+  .h-[var(--header-height)] {
+    min-height: 56px;
+  }
+  
+  /* Prevent horizontal scrolling */
+  body, #root {
+    overflow-x: hidden;
+  }
+  
+  /* Mobile sidebar animation */
+  .mobile-sidebar {
+    animation: slideInLeft 0.3s ease-out;
+  }
+  
+  @keyframes slideInLeft {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+}
+
+/* Touch improvements */
+.touch-friendly {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+}
+
 /* Timeline marker */
 .timeline-marker {
   position: relative;

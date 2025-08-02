@@ -3,22 +3,38 @@ import React, { useRef, useEffect, useState, memo, useCallback } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useManualRefresh } from '../../hooks'
 import { useSearchStore } from '../../stores/searchStore'
+import { useUIStore } from '../../stores/uiStore'
 import { config } from '../../config'
 
 interface HeaderProps {
   onCompose: () => void
   onSettings: () => void
+  onToggleSidebar?: () => void
 }
 
-export const Header = memo(function Header({ onCompose, onSettings }: HeaderProps) {
+export const Header = memo(function Header({ onCompose, onSettings, onToggleSidebar }: HeaderProps) {
   const session = useAuthStore((state) => state.session)
   const searchRef = useRef<HTMLInputElement>(null)
   const manualRefresh = useManualRefresh()
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
   
   // Use search store
   const searchQuery = useSearchStore((state) => state.query)
   const setSearchQuery = useSearchStore((state) => state.setQuery)
+  
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const width = window.innerWidth
+      setIsMobile(width < 768)
+    }
+    
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
+    return () => window.removeEventListener('resize', checkScreenSize)
+  }, [])
 
   // Focus search on Cmd/Ctrl + K
   useEffect(() => {
@@ -61,73 +77,173 @@ export const Header = memo(function Header({ onCompose, onSettings }: HeaderProp
   const username = session?.username || 'User'
   const firstLetter = username.charAt(0).toUpperCase()
 
+  // Mobile search toggle
+  const toggleMobileSearch = useCallback(() => {
+    setShowSearch(!showSearch)
+    if (!showSearch) {
+      setTimeout(() => searchRef.current?.focus(), 100)
+    }
+  }, [showSearch])
+
   return (
-    <header className="h-[var(--header-height)] bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex items-center px-4 gap-4">
-      {/* Logo */}
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 bg-[var(--proton-purple)] rounded-lg flex items-center justify-center">
-          <div className="i-lucide:mail text-white text-lg" />
-        </div>
-        <span className="font-semibold text-lg">{config.appName}</span>
-      </div>
+    <header className="h-[var(--header-height)] bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex items-center px-2 sm:px-4">
+      {isMobile ? (
+        <>
+          {/* Mobile Header */}
+          {showSearch ? (
+            /* Mobile Search Mode */
+            <div className="flex-1 flex items-center gap-2">
+              <button
+                onClick={toggleMobileSearch}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <div className="i-lucide:arrow-left" />
+              </button>
+              <div className="flex-1 relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 i-lucide:search text-[var(--text-tertiary)]" />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  placeholder="Search messages..."
+                  className="search-input w-full pl-10 pr-4 py-2 rounded-lg text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded"
+                  >
+                    <div className="i-lucide:x text-sm" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Mobile Default Mode */
+            <>
+              {/* Hamburger Menu */}
+              {onToggleSidebar && (
+                <button
+                  onClick={onToggleSidebar}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors mr-2"
+                >
+                  <div className="i-lucide:menu" />
+                </button>
+              )}
+              
+              {/* Logo */}
+              <div className="flex items-center gap-2 flex-1">
+                <div className="w-8 h-8 bg-[var(--proton-purple)] rounded-lg flex items-center justify-center">
+                  <div className="i-lucide:mail text-white text-sm" />
+                </div>
+                <span className="font-semibold text-base truncate">{config.appName}</span>
+              </div>
 
-      {/* Search Bar - Central and prominent */}
-      <div className="flex-1 max-w-2xl mx-auto">
-        <div className="relative">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 i-lucide:search text-[var(--text-tertiary)]" />
-          <input
-            ref={searchRef}
-            type="text"
-            value={searchQuery}
-            onChange={handleSearchChange}
-            placeholder="Search messages... (⌘K)"
-            className="search-input w-full pl-10 pr-4 py-2 rounded-lg text-sm"
-          />
-          {searchQuery && (
-            <button
-              onClick={handleClearSearch}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded"
-            >
-              <div className="i-lucide:x text-sm" />
-            </button>
+              {/* Mobile Actions */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={toggleMobileSearch}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  title="Search"
+                >
+                  <div className="i-lucide:search" />
+                </button>
+                
+                <button
+                  onClick={onCompose}
+                  className="compose-btn p-2 rounded-lg"
+                  title="New message"
+                >
+                  <div className="i-lucide:edit-3" />
+                </button>
+                
+                <button
+                  onClick={handleManualRefresh}
+                  disabled={isRefreshing}
+                  className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+                  title="Refresh"
+                >
+                  <div className={`i-lucide:refresh-cw ${isRefreshing ? 'animate-spin' : ''}`} />
+                </button>
+                
+                <button onClick={onSettings} className="settings-btn p-2 rounded-lg" title="Settings">
+                  <div className="i-lucide:settings" />
+                </button>
+              </div>
+            </>
           )}
-        </div>
-      </div>
-
-      {/* Right side actions */}
-      <div className="flex items-center gap-2">
-        {/* Manual Refresh Button */}
-        <button
-          onClick={handleManualRefresh}
-          disabled={isRefreshing}
-          className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
-          title="Refresh emails (⌘R)"
-        >
-          <div className={`i-lucide:refresh-cw ${isRefreshing ? 'animate-spin' : ''}`} />
-        </button>
-
-        {/* Compose Button */}
-        <button
-          onClick={onCompose}
-          className="compose-btn px-4 py-2 rounded-lg flex items-center gap-2"
-        >
-          <div className="i-lucide:edit-3" />
-          <span>New message</span>
-        </button>
-
-        {/* User Menu */}
-        <div className="flex items-center gap-3 ml-4">
-          <div className="w-8 h-8 bg-[var(--proton-purple)] rounded-full flex items-center justify-center text-sm font-medium">
-            {firstLetter}
+        </>
+      ) : (
+        <>
+          {/* Desktop Header */}
+          {/* Logo */}
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-[var(--proton-purple)] rounded-lg flex items-center justify-center">
+              <div className="i-lucide:mail text-white text-lg" />
+            </div>
+            <span className="font-semibold text-lg">{config.appName}</span>
           </div>
-          <span className="text-sm text-[var(--text-secondary)]">{username}</span>
-        </div>
 
-        {/* Settings */}
-        <button onClick={onSettings} className="settings-btn p-2 rounded-lg ml-2" title="Settings">
-          <div className="i-lucide:settings" />
-        </button>
-      </div>
+          {/* Search Bar - Central and prominent */}
+          <div className="flex-1 max-w-2xl mx-auto">
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 i-lucide:search text-[var(--text-tertiary)]" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={searchQuery}
+                onChange={handleSearchChange}
+                placeholder="Search messages... (⌘K)"
+                className="search-input w-full pl-10 pr-4 py-2 rounded-lg text-sm"
+              />
+              {searchQuery && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded"
+                >
+                  <div className="i-lucide:x text-sm" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Right side actions */}
+          <div className="flex items-center gap-2">
+            {/* Manual Refresh Button */}
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+              title="Refresh emails (⌘R)"
+            >
+              <div className={`i-lucide:refresh-cw ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+
+            {/* Compose Button */}
+            <button
+              onClick={onCompose}
+              className="compose-btn px-4 py-2 rounded-lg flex items-center gap-2"
+            >
+              <div className="i-lucide:edit-3" />
+              <span>New message</span>
+            </button>
+
+            {/* User Menu */}
+            <div className="flex items-center gap-3 ml-4">
+              <div className="w-8 h-8 bg-[var(--proton-purple)] rounded-full flex items-center justify-center text-sm font-medium">
+                {firstLetter}
+              </div>
+              <span className="text-sm text-[var(--text-secondary)]">{username}</span>
+            </div>
+
+            {/* Settings */}
+            <button onClick={onSettings} className="settings-btn p-2 rounded-lg ml-2" title="Settings">
+              <div className="i-lucide:settings" />
+            </button>
+          </div>
+        </>
+      )}
     </header>
   )
 })

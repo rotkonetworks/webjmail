@@ -40,6 +40,7 @@ export function Layout() {
   const [showSettings, setShowSettings] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [isTablet, setIsTablet] = useState(false)
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false)
   
   // Apply theme and font to document
   useEffect(() => {
@@ -107,6 +108,32 @@ export function Layout() {
     setShowSettings(prev => !prev)
   }, [])
   
+  const toggleMobileSidebar = useCallback(() => {
+    setShowMobileSidebar(prev => !prev)
+  }, [])
+  
+  // Close mobile sidebar when email is selected
+  useEffect(() => {
+    if (selectedEmailId && isMobile) {
+      setShowMobileSidebar(false)
+    }
+  }, [selectedEmailId, isMobile])
+  
+  // Close mobile sidebar on outside click
+  useEffect(() => {
+    if (!isMobile || !showMobileSidebar) return
+    
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Element
+      if (!target.closest('.mobile-sidebar') && !target.closest('[data-mobile-toggle]')) {
+        setShowMobileSidebar(false)
+      }
+    }
+    
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [isMobile, showMobileSidebar])
+  
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -133,12 +160,26 @@ export function Layout() {
       <Header
         onCompose={handleCompose}
         onSettings={toggleSettings}
+        onToggleSidebar={isMobile ? toggleMobileSidebar : undefined}
       />
       
+      {/* Mobile Sidebar Overlay */}
+      {isMobile && showMobileSidebar && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black bg-opacity-50" />
+          
+          {/* Sidebar */}
+          <div className="mobile-sidebar relative bg-[var(--bg-secondary)] w-64 h-full border-r border-[var(--border-color)] slide-in">
+            <MemoizedSidebar />
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar - responsive visibility */}
-        {(!isMobile || viewMode === 'column') && (
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Desktop Sidebar */}
+        {!isMobile && (
           <ResizablePane
             width={sidebarWidth}
             minWidth={180}
