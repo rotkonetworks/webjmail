@@ -1,7 +1,7 @@
 // src/components/Layout/Header.tsx - Updated with manual refresh
 import React, { useRef, useEffect, useState } from 'react'
 import { useAuthStore } from '../../stores/authStore'
-import { useManualRefresh } from '../../hooks/useJMAP'
+import { useManualRefresh } from '../../hooks'
 import { config } from '../../config'
 
 interface HeaderProps {

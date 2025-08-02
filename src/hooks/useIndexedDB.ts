@@ -5,7 +5,7 @@ import Dexie from 'dexie'
 import { db } from '../db'
 import { syncManager } from '../db/sync'
 import { useAuthStore } from '../stores/authStore'
-import { usePrimaryAccountId } from './useJMAP'
+import { usePrimaryAccountId } from './usePrimaryAccountId'
 
 function useCurrentUserId(): string | null {
   const session = useAuthStore((state) => state.session)

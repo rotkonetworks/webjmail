@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useAuthStore } from '../../stores/authStore'
-import { useSendEmail } from '../../hooks/useJMAP'
+import { useSendEmail } from '../../hooks'
 import { config } from '../../config'
 
 interface MessageComposerProps {

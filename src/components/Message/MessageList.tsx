@@ -1,6 +1,6 @@
 // src/components/Message/MessageList.tsx - Simplified without offline-first
 import React, { useMemo, useEffect, useRef, useState } from 'react'
-import { useEmails, useEmailSearch } from '../../hooks/useJMAP'
+import { useEmails, useEmailSearch } from '../../hooks'
 import { useMailStore } from '../../stores/mailStore'
 import { format, isToday, isYesterday } from 'date-fns'
 import DOMPurify from 'dompurify'

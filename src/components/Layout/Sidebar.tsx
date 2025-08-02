@@ -1,5 +1,5 @@
 import React from 'react'
-import { useMailboxes } from '../../hooks/useJMAP'
+import { useMailboxes } from '../../hooks'
 import { useMailStore } from '../../stores/mailStore'
 import { useAuthStore } from '../../stores/authStore'
 

@@ -7,7 +7,7 @@ import {
   useDeleteEmail,
   usePrimaryAccountId,
   useEmailThread,
-} from '../../hooks/useJMAP'
+} from '../../hooks'
 import { MessageComposer } from './MessageComposer'
 import DOMPurify from 'dompurify'
 import { format } from 'date-fns'

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import { useMailboxes } from '../../hooks/useJMAP'
+import { useMailboxes } from '../../hooks'
 import { useMailStore } from '../../stores/mailStore'
 import { Mailbox } from '../../api/types'
 
