@@ -32,10 +32,10 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
   const accountId = usePrimaryAccountId()
   const deleteEmailMutation = useDeleteEmail()
-  
+
   // Get search query from store
   const searchQuery = useSearchStore((state) => state.query)
-  
+
   // Use online emails directly
   const {
     emails,
@@ -47,24 +47,24 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
     isLoading,
     isFetching,
   } = useEmails(selectedMailboxId)
-  
+
   // Track if we're loading/refreshing
   const isRefreshing = isFetching && !isFetchingNextPage
-  
+
   // Debounce search query
   const searchDebounce = useDebouncedValue(searchQuery, 300)
-  
+
   // Server search
   const { data: serverSearchResults, isFetching: isSearching } = useEmailSearch(
     searchDebounce,
     searchDebounce.length > 2
   )
-  
+
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
   const listRef = useRef<HTMLDivElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
-  
+
   // Filter emails - MOVED BEFORE useEffect to fix reference error
   const filteredEmails = useMemo(() => {
     // Use search results if searching
@@ -74,11 +74,11 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
     // Return all emails if not searching
     return emails
   }, [emails, serverSearchResults, searchDebounce])
-  
+
   // Intersection observer for infinite scroll
   useEffect(() => {
     if (!loadMoreRef.current || !hasMore || isFetchingNextPage || searchDebounce) return
-    
+
     const element = loadMoreRef.current
     const observer = new IntersectionObserver(
       (entries) => {
@@ -92,29 +92,29 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
         rootMargin: '100px'
       }
     )
-    
+
     observer.observe(element)
     return () => {
       observer.disconnect()
     }
   }, [hasMore, isFetchingNextPage, fetchNextPage, searchDebounce])
-  
+
   // Memoized delete handler
   const handleDeleteEmail = useCallback(async (emailId: string) => {
     if (!accountId) return
-    
+
     const email = emails.find(e => e.id === emailId)
     if (!email) return
-    
+
     // Optional: Add confirmation for non-spam emails
     const isSpam = email.keywords.$junk || false
     if (!isSpam && !confirm('Delete this message?')) {
       return
     }
-    
+
     try {
       await deleteEmailMutation.mutateAsync({ accountId, emailId })
-      
+
       // Select next email after deletion
       const currentIndex = filteredEmails.findIndex(e => e.id === emailId)
       if (currentIndex !== -1 && filteredEmails.length > 1) {
@@ -130,7 +130,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
       console.error('Failed to delete email:', error)
     }
   }, [accountId, emails, filteredEmails, deleteEmailMutation, selectEmail])
-  
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -139,13 +139,13 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
         e.preventDefault()
         onSelectEmail?.(selectedEmailId)
       }
-      
+
       // Delete key to delete selected email
       if ((e.key === 'Delete' || e.key === 'd') && selectedEmailId && accountId) {
         e.preventDefault()
         handleDeleteEmail(selectedEmailId)
       }
-      
+
       // Arrow keys for navigation
       if ((e.key === 'ArrowDown' || e.key === 'j') && filteredEmails.length > 0) {
         e.preventDefault()
@@ -155,7 +155,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
           selectEmail(filteredEmails[nextIndex === -1 ? 0 : nextIndex].id)
         }
       }
-      
+
       if ((e.key === 'ArrowUp' || e.key === 'k') && filteredEmails.length > 0) {
         e.preventDefault()
         const currentIndex = filteredEmails.findIndex(email => email.id === selectedEmailId)
@@ -165,26 +165,26 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
         }
       }
     }
-    
+
     const listElement = listRef.current
     if (listElement) {
       listElement.addEventListener('keydown', handleKeyDown)
       return () => listElement.removeEventListener('keydown', handleKeyDown)
     }
   }, [selectedEmailId, onSelectEmail, filteredEmails, accountId, selectEmail, handleDeleteEmail])
-  
+
   const formatEmailDate = useCallback((dateString: string): string => {
     const date = new Date(dateString)
     if (isToday(date)) return format(date, 'HH:mm')
     if (isYesterday(date)) return 'Yesterday'
     return format(date, 'MMM d')
   }, [])
-  
+
   // Security: Escape regex special characters to prevent ReDoS attacks
   const escapeRegex = useCallback((str: string): string => {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }, [])
-  
+
   // Security: Sanitize and validate input to prevent XSS and injection attacks
   const sanitizeText = useCallback((text: string): string => {
     if (!text || typeof text !== 'string') return ''
@@ -192,7 +192,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
     if (text.length > 10000) text = text.substring(0, 10000)
     return DOMPurify.sanitize(text, { ALLOWED_TAGS: [] })
   }, [])
-  
+
   const highlightText = useCallback((text: string, query: string) => {
     if (!query || !text) return sanitizeText(text)
     // Security: Validate and limit query length
@@ -200,7 +200,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
     // Security: Escape regex special characters to prevent ReDoS
     const escapedQuery = escapeRegex(query)
     const sanitizedText = sanitizeText(text)
-    
+
     try {
       const parts = sanitizedText.split(new RegExp(`(${escapedQuery})`, 'gi'))
       return parts.map((part, i) =>
@@ -209,8 +209,8 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
             {part}
           </span>
         ) : (
-          part
-        )
+            part
+          )
       )
     } catch (error) {
       // Fallback if regex fails
@@ -218,12 +218,12 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
       return sanitizedText
     }
   }, [sanitizeText, escapeRegex])
-  
+
   const handleRefresh = useCallback(() => {
     console.log('[MessageList] Manual refresh triggered')
     refetch()
   }, [refetch])
-  
+
   // Memoized click handlers
   const handleEmailClick = useCallback((emailId: string) => {
     selectEmail(emailId)
@@ -231,13 +231,13 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
       onSelectEmail?.(emailId)
     }
   }, [selectEmail, viewMode, onSelectEmail])
-  
+
   const handleEmailDoubleClick = useCallback((emailId: string) => {
     if (viewMode === 'column' && emailId === selectedEmailId) {
       onSelectEmail?.(emailId)
     }
   }, [viewMode, selectedEmailId, onSelectEmail])
-  
+
   if (!selectedMailboxId) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -245,7 +245,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
       </div>
     )
   }
-  
+
   if (isLoading && filteredEmails.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -256,7 +256,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
       </div>
     )
   }
-  
+
   if (filteredEmails.length === 0 && !isLoading && !isSearching) {
     return (
       <div className="h-full flex items-center justify-center p-8">
@@ -275,7 +275,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
       </div>
     )
   }
-  
+
   return (
     <div className="h-full overflow-y-auto" ref={listRef} tabIndex={0}>
       {/* Header with keyboard shortcuts info */}
@@ -290,15 +290,15 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
               {isSearching ? 'Searching...' : `${filteredEmails.length} results`}
             </>
           ) : total > 0 ? (
-            <>
-              {filteredEmails.length} of {total} {total === 1 ? 'conversation' : 'conversations'}
-            </>
-          ) : (
-            <>
-              {filteredEmails.length}{' '}
-              {filteredEmails.length === 1 ? 'conversation' : 'conversations'}
-            </>
-          )}
+              <>
+                {filteredEmails.length} of {total} {total === 1 ? 'conversation' : 'conversations'}
+              </>
+            ) : (
+                <>
+                  {filteredEmails.length}{' '}
+                  {filteredEmails.length === 1 ? 'conversation' : 'conversations'}
+                </>
+              )}
         </span>
         <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
           <span className="hidden sm:inline">↑↓ Navigate • Enter Open • D Delete</span>
@@ -312,42 +312,42 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
           </button>
         </div>
       </div>
-      
+
       {/* Email list */}
       {filteredEmails.map((email) => {
         const isSelected = email.id === selectedEmailId
         const isUnread = !email.keywords.$seen
         const sender = email.from?.[0]
         const senderName = sanitizeText(sender?.name || sender?.email?.split('@')[0] || 'Unknown')
-        
+
         return (
           <div
             key={email.id}
             onClick={() => handleEmailClick(email.id)}
             onDoubleClick={() => handleEmailDoubleClick(email.id)}
             className={`
-              email-item cursor-pointer relative group
-              ${isSelected ? 'selected' : ''}
-              ${viewMode === 'row' ? 'px-6 py-4' : 'px-4 py-3'}
-            `}
+email-item cursor-pointer relative group
+${isSelected ? 'selected' : ''}
+${viewMode === 'row' ? 'px-6 py-4' : 'px-4 py-3'}
+`}
           >
             <div className={`flex items-start gap-3 ${viewMode === 'row' ? 'gap-4' : 'gap-3'}`}>
               {/* Unread indicator */}
               <div className={viewMode === 'row' ? 'pt-2' : 'pt-1.5'}>
                 {isUnread && <div className="unread-dot" />}
               </div>
-              
+
               {/* Content */}
               <div className="flex-1 min-w-0">
                 {/* Header row */}
                 <div className="flex items-center justify-between gap-2 mb-0.5">
                   <span
                     className={`
-                    truncate
-                    ${viewMode === 'row' ? 'text-base' : 'text-sm'}
-                    ${isUnread ? 'font-semibold' : 'font-medium'}
-                    ${isSelected ? 'text-white' : 'text-[var(--text-primary)]'}
-                  `}
+truncate
+${viewMode === 'row' ? 'text-base' : 'text-sm'}
+${isUnread ? 'font-semibold' : 'font-medium'}
+${isSelected ? 'text-white' : 'text-[var(--text-primary)]'}
+`}
                   >
                     {searchQuery
                       ? highlightText(senderName, searchQuery)
@@ -355,41 +355,41 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
                   </span>
                   <span
                     className={`
-                    ${viewMode === 'row' ? 'text-sm' : 'text-xs'}
-                     text-[var(--text-tertiary)] flex-shrink-0
-                  `}
+${viewMode === 'row' ? 'text-sm' : 'text-xs'}
+text-[var(--text-tertiary)] flex-shrink-0
+`}
                   >
                     {formatEmailDate(email.receivedAt)}
                   </span>
                 </div>
-                
+
                 {/* Subject */}
                 <div
                   className={`
-                  mb-0.5 truncate
-                  ${viewMode === 'row' ? 'text-base' : 'text-sm'}
-                  ${isUnread ? 'font-medium' : ''}
-                  ${isSelected ? 'text-white' : 'text-[var(--text-primary)]'}
-                `}
+mb-0.5 truncate
+${viewMode === 'row' ? 'text-base' : 'text-sm'}
+${isUnread ? 'font-medium' : ''}
+${isSelected ? 'text-white' : 'text-[var(--text-primary)]'}
+`}
                 >
                   {searchQuery
                     ? highlightText(email.subject || '(no subject)', searchQuery)
                     : sanitizeText(email.subject || '(no subject)')}
                 </div>
-                
+
                 {/* Preview */}
                 <div
                   className={`
-                  truncate
-                  ${viewMode === 'row' ? 'text-sm' : 'text-sm'}
-                  ${isSelected ? 'text-white/70' : 'text-[var(--text-tertiary)]'}
-                `}
+truncate
+${viewMode === 'row' ? 'text-sm' : 'text-sm'}
+${isSelected ? 'text-white/70' : 'text-[var(--text-tertiary)]'}
+`}
                 >
                   {searchQuery
                     ? highlightText(email.preview || '', searchQuery)
                     : sanitizeText(email.preview || '')}
                 </div>
-                
+
                 {/* Labels */}
                 <div className="flex items-center gap-2 mt-1">
                   {email.keywords.$flagged && (
@@ -406,14 +406,14 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
                   )}
                 </div>
               </div>
-              
+
               {/* Quick action buttons - show on hover */}
               <div className={`
-                absolute right-4 top-1/2 -translate-y-1/2
-                opacity-0 group-hover:opacity-100 transition-opacity
-                flex items-center gap-1
-                ${isSelected ? 'opacity-100' : ''}
-              `}>
+absolute right-4 top-1/2 -translate-y-1/2
+opacity-0 group-hover:opacity-100 transition-opacity
+flex items-center gap-1
+${isSelected ? 'opacity-100' : ''}
+`}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -425,7 +425,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
                   <div className="i-lucide:trash-2 text-sm text-red-400" />
                 </button>
               </div>
-              
+
               {/* Row mode extras */}
               {viewMode === 'row' && (
                 <div className="flex items-center gap-3 text-[var(--text-tertiary)]">
@@ -439,7 +439,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
           </div>
         )
       })}
-      
+
       {/* Load more */}
       {!searchDebounce && emails.length > 0 && (
         <div ref={loadMoreRef} className="p-4 text-center">
@@ -450,23 +450,23 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
                 <span className="text-sm">Loading more messages...</span>
               </div>
             ) : (
-              <button
-                onClick={() => fetchNextPage()}
-                className="text-sm text-[var(--primary-color)] hover:underline"
-                disabled={isFetchingNextPage}
-              >
-                Load more
-              </button>
-            )
+                <button
+                  onClick={() => fetchNextPage()}
+                  className="text-sm text-[var(--primary-color)] hover:underline"
+                  disabled={isFetchingNextPage}
+                >
+                  Load more
+                </button>
+              )
           ) : emails.length > 0 && total > 0 ? (
-            <div className="flex items-center justify-center gap-2 text-[var(--text-tertiary)]">
-              <div className="i-lucide:check-circle text-sm" />
-              <span className="text-sm">All {total} messages loaded</span>
-            </div>
-          ) : null}
+              <div className="flex items-center justify-center gap-2 text-[var(--text-tertiary)]">
+                <div className="i-lucide:check-circle text-sm" />
+                <span className="text-sm">All {total} messages loaded</span>
+              </div>
+            ) : null}
         </div>
       )}
-      
+
       {/* Server search indicator */}
       {isSearching && (
         <div className="p-4 text-center text-[var(--text-tertiary)]">

@@ -34,7 +34,6 @@ export function Layout() {
   const setSidebarWidth = useUIStore((state) => state.setSidebarWidth)
   const messageListWidth = useUIStore((state) => state.messageListWidth)
   const setMessageListWidth = useUIStore((state) => state.setMessageListWidth)
-  // Composer mode is always inline now
   
   const [showComposer, setShowComposer] = useState(false)
   const [composers, setComposers] = useState<Composer[]>([])
@@ -246,7 +245,7 @@ export function Layout() {
             isMobile={isMobile}
           />
         </div>
-      ))
+      ))}
     </div>
   )
 }
