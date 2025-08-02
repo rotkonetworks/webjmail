@@ -1,6 +1,7 @@
 // src/components/Message/MessageView.tsx
 import React, { useState, useRef, useEffect } from 'react'
 import { useMailStore } from '../../stores/mailStore'
+import { useUIStore } from '../../stores/uiStore'
 import {
   useMarkAsRead,
   useFlagEmail,
@@ -15,36 +16,35 @@ import { jmapClient } from '../../api/jmap'
 
 interface MessageViewProps {
   onClose?: () => void
+  onReply?: (mode: 'reply' | 'replyAll' | 'forward', replyTo: any) => void
 }
 
-export function MessageView({ onClose }: MessageViewProps = {}) {
+export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const emails = useMailStore((state) => state.emails)
   const email = selectedEmailId ? emails[selectedEmailId] : null
   const accountId = usePrimaryAccountId()
   const selectEmail = useMailStore((state) => state.selectEmail)
-
+  const composerMode = useUIStore((state) => state.composerMode)
   const markAsRead = useMarkAsRead()
   const flagEmail = useFlagEmail()
   const deleteEmail = useDeleteEmail()
-
   const [showComposer, setShowComposer] = useState(false)
-  const [composerMode, setComposerMode] = useState<'reply' | 'replyAll' | 'forward'>('reply')
+  const [composerModeLocal, setComposerModeLocal] = useState<'reply' | 'replyAll' | 'forward'>('reply')
   const [expandedEmails, setExpandedEmails] = useState<Set<string>>(new Set())
-
   const timelineRef = useRef<HTMLDivElement>(null)
   const emailRefs = useRef<Map<string, HTMLDivElement>>(new Map())
-
+  
   // Fetch thread emails
   const { data: threadEmails } = useEmailThread(email?.threadId || null)
-
+  
   // Mark as read
   useEffect(() => {
     if (email && !email.keywords.$seen && accountId) {
       markAsRead.mutate({ emailId: email.id, isRead: true })
     }
   }, [email?.id])
-
+  
   // Expand latest email by default
   useEffect(() => {
     if (email && threadEmails && threadEmails.length > 0) {
@@ -53,8 +53,8 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
         (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
       )
       const newestEmail = sortedThreadEmails[0]
-
       setExpandedEmails(new Set([newestEmail.id]))
+      
       // Scroll to newest email after render
       setTimeout(() => {
         const element = emailRefs.current.get(newestEmail.id)
@@ -62,14 +62,25 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
       }, 50)
     }
   }, [email?.id, threadEmails])
-
+  
   if (!email || !accountId) return null
-
+  
   const handleReply = (mode: 'reply' | 'replyAll' | 'forward') => {
-    setComposerMode(mode)
-    setShowComposer(true)
+    if (composerMode === 'popup') {
+      setComposerModeLocal(mode)
+      setShowComposer(true)
+    } else if (onReply) {
+      // Use inline/facebook composer
+      onReply(mode, {
+        emailId: email.id,
+        subject: email.subject,
+        from: email.from || [],
+        to: email.to || [],
+        cc: email.cc,
+      })
+    }
   }
-
+  
   const handleDelete = () => {
     if (confirm('Delete this message?')) {
       deleteEmail.mutate({ accountId, emailId: email.id })
@@ -77,7 +88,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
       onClose?.()
     }
   }
-
+  
   const handleFlag = () => {
     flagEmail.mutate({
       accountId,
@@ -85,7 +96,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
       isFlagged: !email.keywords.$flagged,
     })
   }
-
+  
   const toggleEmailExpansion = (emailId: string) => {
     setExpandedEmails((prev) => {
       const next = new Set(prev)
@@ -97,22 +108,22 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
       return next
     })
   }
-
+  
   const scrollToEmail = (emailId: string) => {
     const element = emailRefs.current.get(emailId)
     element?.scrollIntoView({ behavior: 'auto', block: 'start' })
   }
-
+  
   const handleDownloadAttachment = (attachment: any) => {
     if (!accountId || !attachment.blobId) return
-
+    
     const url = jmapClient.getBlobUrl(
       accountId,
       attachment.blobId,
       attachment.type || 'application/octet-stream',
       attachment.name || 'attachment'
     )
-
+    
     // Create download link with auth header
     const link = document.createElement('a')
     link.href = url
@@ -122,7 +133,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
     link.click()
     document.body.removeChild(link)
   }
-
+  
   const getAttachmentIcon = (type: string) => {
     if (type.startsWith('image/')) return 'i-lucide:image'
     if (type.startsWith('video/')) return 'i-lucide:video'
@@ -132,13 +143,13 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
     if (type.includes('doc') || type.includes('word')) return 'i-lucide:file-text'
     return 'i-lucide:file'
   }
-
+  
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + ' B'
     if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB'
     return Math.round((bytes / (1024 * 1024)) * 10) / 10 + ' MB'
   }
-
+  
   const renderEmailContent = (email: any) => {
     const htmlBody = email.htmlBody?.[0]
     const textBody = email.textBody?.[0]
@@ -147,9 +158,9 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
       : textBody
         ? email.bodyValues[textBody.partId]
         : null
-
+    
     if (!bodyValue) return null
-
+    
     if (htmlBody) {
       return (
         <div
@@ -196,20 +207,20 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
         />
       )
     }
-
+    
     return (
       <pre className="whitespace-pre-wrap font-sans text-[var(--text-primary)]">
         {bodyValue.value}
       </pre>
     )
   }
-
+  
   // Use thread emails if available, otherwise just the current email
   // Sort emails by receivedAt (newest first)
   const displayEmails = (threadEmails || [email]).sort(
     (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
   )
-
+  
   return (
     <>
       <div className="h-full flex">
@@ -224,22 +235,19 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                   onClose?.()
                 }}
                 className="p-2 hover:bg-white/10 rounded-lg"
-                title="Back"
+                title="Back (Escape)"
               >
                 <div className="i-lucide:arrow-left" />
               </button>
-
               <h2 className="text-lg font-medium text-[var(--text-primary)] ml-2">
                 {email.subject || '(no subject)'}
               </h2>
-
               {displayEmails.length > 1 && (
                 <span className="text-sm text-[var(--text-tertiary)] ml-2">
                   ({displayEmails.length} messages)
                 </span>
               )}
             </div>
-
             <div className="flex items-center gap-1">
               <button
                 onClick={() => handleReply('reply')}
@@ -281,7 +289,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
               </button>
             </div>
           </div>
-
+          
           {/* Email thread */}
           <div className="flex-1 overflow-y-auto timeline-scrollbar" ref={timelineRef}>
             <div className="email-timeline max-w-4xl mx-auto pt-4 pb-6 px-6">
@@ -290,7 +298,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                 const isCurrent = threadEmail.id === email.id
                 const sender = threadEmail.from?.[0]
                 const isLatest = index === displayEmails.length - 1
-
+                
                 return (
                   <div
                     key={threadEmail.id}
@@ -317,7 +325,6 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                           >
                             {(sender?.name || sender?.email || 'U').charAt(0).toUpperCase()}
                           </div>
-
                           {/* Sender info */}
                           <div>
                             <div className="font-medium text-[var(--text-primary)]">
@@ -328,7 +335,6 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                             </div>
                           </div>
                         </div>
-
                         {/* Time and expand icon */}
                         <div className="flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
                           <span>
@@ -339,7 +345,6 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                           />
                         </div>
                       </div>
-
                       {/* Preview when collapsed */}
                       {!isExpanded && (
                         <p className="mt-2 text-sm text-[var(--text-tertiary)] truncate">
@@ -347,7 +352,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                         </p>
                       )}
                     </div>
-
+                    
                     {/* Email content when expanded */}
                     {isExpanded && (
                       <div className="mt-4 bg-[var(--bg-secondary)] rounded-lg p-6">
@@ -368,10 +373,10 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                             )}
                           </div>
                         )}
-
+                        
                         {/* Email body */}
                         <div className="mb-6">{renderEmailContent(threadEmail)}</div>
-
+                        
                         {/* Attachments */}
                         {threadEmail.attachments && threadEmail.attachments.length > 0 && (
                           <div className="mt-6 pt-6 border-t border-[var(--border-color)]">
@@ -411,7 +416,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
             </div>
           </div>
         </div>
-
+        
         {/* Timeline navigation bar - only show for threads */}
         {displayEmails.length > 1 && (
           <div className="w-16 bg-[var(--bg-secondary)] border-l border-[var(--border-color)] p-2">
@@ -424,7 +429,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
                   const position = (index / (chronologicalEmails.length - 1)) * 100
                   const date = new Date(threadEmail.receivedAt)
                   const isCurrent = threadEmail.id === email.id
-
+                  
                   return (
                     <button
                       key={threadEmail.id}
@@ -449,8 +454,9 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
           </div>
         )}
       </div>
-
-      {showComposer && (
+      
+      {/* Popup composer modal (if using popup mode) */}
+      {showComposer && composerMode === 'popup' && (
         <MessageComposer
           onClose={() => setShowComposer(false)}
           replyTo={{
@@ -460,7 +466,7 @@ export function MessageView({ onClose }: MessageViewProps = {}) {
             to: email.to || [],
             cc: email.cc,
           }}
-          mode={composerMode}
+          mode={composerModeLocal}
         />
       )}
     </>

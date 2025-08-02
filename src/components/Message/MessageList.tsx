@@ -1,6 +1,6 @@
-// src/components/Message/MessageList.tsx - Simplified without offline-first
+// src/components/Message/MessageList.tsx
 import React, { useMemo, useEffect, useRef, useState } from 'react'
-import { useEmails, useEmailSearch } from '../../hooks'
+import { useEmails, useEmailSearch, useDeleteEmail, usePrimaryAccountId } from '../../hooks'
 import { useMailStore } from '../../stores/mailStore'
 import { format, isToday, isYesterday } from 'date-fns'
 import DOMPurify from 'dompurify'
@@ -13,7 +13,9 @@ interface MessageListProps {
 
 export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }: MessageListProps) {
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
-
+  const accountId = usePrimaryAccountId()
+  const deleteEmailMutation = useDeleteEmail()
+  
   // Use online emails directly
   const {
     emails,
@@ -25,7 +27,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     isLoading,
     isFetching,
   } = useEmails(selectedMailboxId)
-
+  
   const [searchDebounce, setSearchDebounce] = useState('')
   
   // Track if we're loading/refreshing
@@ -38,22 +40,32 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     }, 300)
     return () => clearTimeout(timer)
   }, [searchQuery])
-
+  
   // Server search
   const { data: serverSearchResults, isFetching: isSearching } = useEmailSearch(
     searchDebounce,
     searchDebounce.length > 2
   )
-
+  
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
   const listRef = useRef<HTMLDivElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
-
+  
+  // Filter emails - MOVED BEFORE useEffect to fix reference error
+  const filteredEmails = useMemo(() => {
+    // Use search results if searching
+    if (searchDebounce && serverSearchResults) {
+      return serverSearchResults
+    }
+    // Return all emails if not searching
+    return emails
+  }, [emails, serverSearchResults, searchDebounce])
+  
   // Intersection observer for infinite scroll
   useEffect(() => {
     if (!loadMoreRef.current || !hasMore || isFetchingNextPage || searchDebounce) return
-
+    
     const element = loadMoreRef.current
     const observer = new IntersectionObserver(
       (entries) => {
@@ -67,53 +79,67 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
         rootMargin: '100px'
       }
     )
-
+    
     observer.observe(element)
-
     return () => {
       observer.disconnect()
     }
   }, [hasMore, isFetchingNextPage, fetchNextPage, searchDebounce])
-
-  // Handle Enter key
+  
+  // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Enter key to open email
       if (e.key === 'Enter' && selectedEmailId) {
         e.preventDefault()
         onSelectEmail?.(selectedEmailId)
       }
+      
+      // Delete key to delete selected email
+      if ((e.key === 'Delete' || e.key === 'd') && selectedEmailId && accountId) {
+        e.preventDefault()
+        handleDeleteEmail(selectedEmailId)
+      }
+      
+      // Arrow keys for navigation
+      if ((e.key === 'ArrowDown' || e.key === 'j') && filteredEmails.length > 0) {
+        e.preventDefault()
+        const currentIndex = filteredEmails.findIndex(email => email.id === selectedEmailId)
+        const nextIndex = Math.min(currentIndex + 1, filteredEmails.length - 1)
+        if (nextIndex !== currentIndex || currentIndex === -1) {
+          selectEmail(filteredEmails[nextIndex === -1 ? 0 : nextIndex].id)
+        }
+      }
+      
+      if ((e.key === 'ArrowUp' || e.key === 'k') && filteredEmails.length > 0) {
+        e.preventDefault()
+        const currentIndex = filteredEmails.findIndex(email => email.id === selectedEmailId)
+        const prevIndex = Math.max(currentIndex - 1, 0)
+        if (prevIndex !== currentIndex) {
+          selectEmail(filteredEmails[prevIndex].id)
+        }
+      }
     }
-
+    
     const listElement = listRef.current
     if (listElement) {
       listElement.addEventListener('keydown', handleKeyDown)
       return () => listElement.removeEventListener('keydown', handleKeyDown)
     }
-  }, [selectedEmailId, onSelectEmail])
-
-  // Filter emails
-  const filteredEmails = useMemo(() => {
-    // Use search results if searching
-    if (searchDebounce && serverSearchResults) {
-      return serverSearchResults
-    }
-
-    // Return all emails if not searching
-    return emails
-  }, [emails, serverSearchResults, searchDebounce])
-
+  }, [selectedEmailId, onSelectEmail, filteredEmails, accountId, selectEmail])
+  
   const formatEmailDate = (dateString: string): string => {
     const date = new Date(dateString)
     if (isToday(date)) return format(date, 'HH:mm')
     if (isYesterday(date)) return 'Yesterday'
     return format(date, 'MMM d')
   }
-
+  
   // Security: Escape regex special characters to prevent ReDoS attacks
   const escapeRegex = (str: string): string => {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
-
+  
   // Security: Sanitize and validate input to prevent XSS and injection attacks
   const sanitizeText = (text: string): string => {
     if (!text || typeof text !== 'string') return ''
@@ -121,17 +147,15 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
     if (text.length > 10000) text = text.substring(0, 10000)
     return DOMPurify.sanitize(text, { ALLOWED_TAGS: [] })
   }
-
+  
   const highlightText = (text: string, query: string) => {
     if (!query || !text) return sanitizeText(text)
-
     // Security: Validate and limit query length
     if (query.length > 100) return sanitizeText(text)
-
     // Security: Escape regex special characters to prevent ReDoS
     const escapedQuery = escapeRegex(query)
     const sanitizedText = sanitizeText(text)
-
+    
     try {
       const parts = sanitizedText.split(new RegExp(`(${escapedQuery})`, 'gi'))
       return parts.map((part, i) =>
@@ -149,12 +173,43 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       return sanitizedText
     }
   }
-
+  
   const handleRefresh = () => {
     console.log('[MessageList] Manual refresh triggered')
     refetch()
   }
-
+  
+  const handleDeleteEmail = async (emailId: string) => {
+    if (!accountId) return
+    
+    const email = emails.find(e => e.id === emailId)
+    if (!email) return
+    
+    // Optional: Add confirmation for non-spam emails
+    const isSpam = email.keywords.$junk || false
+    if (!isSpam && !confirm('Delete this message?')) {
+      return
+    }
+    
+    try {
+      await deleteEmailMutation.mutateAsync({ accountId, emailId })
+      
+      // Select next email after deletion
+      const currentIndex = filteredEmails.findIndex(e => e.id === emailId)
+      if (currentIndex !== -1 && filteredEmails.length > 1) {
+        const nextIndex = currentIndex < filteredEmails.length - 1 ? currentIndex : currentIndex - 1
+        const nextEmail = filteredEmails[nextIndex]
+        if (nextEmail && nextEmail.id !== emailId) {
+          selectEmail(nextEmail.id)
+        }
+      } else {
+        selectEmail(null)
+      }
+    } catch (error) {
+      console.error('Failed to delete email:', error)
+    }
+  }
+  
   if (!selectedMailboxId) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -162,7 +217,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       </div>
     )
   }
-
+  
   if (isLoading && filteredEmails.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -173,7 +228,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       </div>
     )
   }
-
+  
   if (filteredEmails.length === 0 && !isLoading && !isSearching) {
     return (
       <div className="h-full flex items-center justify-center p-8">
@@ -192,10 +247,10 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
       </div>
     )
   }
-
+  
   return (
     <div className="h-full overflow-y-auto" ref={listRef} tabIndex={0}>
-      {/* Header */}
+      {/* Header with keyboard shortcuts info */}
       <div className="px-4 py-3 border-b border-[var(--border-color)] flex items-center justify-between sticky top-0 bg-[var(--bg-secondary)] z-10">
         <span className="text-sm text-[var(--text-secondary)]">
           {isRefreshing && (
@@ -218,9 +273,10 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
           )}
         </span>
         <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+          <span className="hidden sm:inline">↑↓ Navigate • Enter Open • D Delete</span>
           <button
             className="p-1 hover:bg-white/10 rounded transition-colors"
-            title="Refresh"
+            title="Refresh (⌘R)"
             onClick={handleRefresh}
             disabled={isRefreshing}
           >
@@ -228,14 +284,14 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
           </button>
         </div>
       </div>
-
+      
       {/* Email list */}
       {filteredEmails.map((email) => {
         const isSelected = email.id === selectedEmailId
         const isUnread = !email.keywords.$seen
         const sender = email.from?.[0]
         const senderName = sanitizeText(sender?.name || sender?.email?.split('@')[0] || 'Unknown')
-
+        
         return (
           <div
             key={email.id}
@@ -245,8 +301,13 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                 onSelectEmail?.(email.id)
               }
             }}
+            onDoubleClick={() => {
+              if (viewMode === 'column' && email.id === selectedEmailId) {
+                onSelectEmail?.(email.id)
+              }
+            }}
             className={`
-              email-item cursor-pointer
+              email-item cursor-pointer relative group
               ${isSelected ? 'selected' : ''}
               ${viewMode === 'row' ? 'px-6 py-4' : 'px-4 py-3'}
             `}
@@ -256,7 +317,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
               <div className={viewMode === 'row' ? 'pt-2' : 'pt-1.5'}>
                 {isUnread && <div className="unread-dot" />}
               </div>
-
+              
               {/* Content */}
               <div className="flex-1 min-w-0">
                 {/* Header row */}
@@ -282,7 +343,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                     {formatEmailDate(email.receivedAt)}
                   </span>
                 </div>
-
+                
                 {/* Subject */}
                 <div
                   className={`
@@ -296,7 +357,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                     ? highlightText(email.subject || '(no subject)', searchQuery)
                     : sanitizeText(email.subject || '(no subject)')}
                 </div>
-
+                
                 {/* Preview */}
                 <div
                   className={`
@@ -309,7 +370,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                     ? highlightText(email.preview || '', searchQuery)
                     : sanitizeText(email.preview || '')}
                 </div>
-
+                
                 {/* Labels */}
                 <div className="flex items-center gap-2 mt-1">
                   {email.keywords.$flagged && (
@@ -326,7 +387,26 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
                   )}
                 </div>
               </div>
-
+              
+              {/* Quick action buttons - show on hover */}
+              <div className={`
+                absolute right-4 top-1/2 -translate-y-1/2
+                opacity-0 group-hover:opacity-100 transition-opacity
+                flex items-center gap-1
+                ${isSelected ? 'opacity-100' : ''}
+              `}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDeleteEmail(email.id)
+                  }}
+                  className="p-1.5 hover:bg-red-500/20 rounded transition-colors"
+                  title="Delete (D)"
+                >
+                  <div className="i-lucide:trash-2 text-sm text-red-400" />
+                </button>
+              </div>
+              
               {/* Row mode extras */}
               {viewMode === 'row' && (
                 <div className="flex items-center gap-3 text-[var(--text-tertiary)]">
@@ -340,7 +420,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
           </div>
         )
       })}
-
+      
       {/* Load more */}
       {!searchDebounce && emails.length > 0 && (
         <div ref={loadMoreRef} className="p-4 text-center">
@@ -367,7 +447,7 @@ export function MessageList({ searchQuery, viewMode = 'column', onSelectEmail }:
           ) : null}
         </div>
       )}
-
+      
       {/* Server search indicator */}
       {isSearching && (
         <div className="p-4 text-center text-[var(--text-tertiary)]">
