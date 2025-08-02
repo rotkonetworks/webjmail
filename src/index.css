@@ -8,6 +8,10 @@
 :root {
   --sidebar-width: 240px;
   --header-height: 56px;
+  --sidebar-min-width: 180px;
+  --sidebar-max-width: 400px;
+  --message-list-min-width: 250px;
+  --message-list-max-width: 600px;
 }
 
 /* Monokai Dark Theme (default) */

@@ -92,52 +92,12 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             <div>
               <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">Compose Mode</h3>
               <div className="space-y-2">
-                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
-                  <input
-                    type="radio"
-                    name="composerMode"
-                    value="popup"
-                    checked={composerMode === 'popup'}
-                    onChange={() => setComposerMode('popup')}
-                  />
-                  <div>
-                    <div className="font-medium">Popup</div>
-                    <div className="text-sm text-[var(--text-tertiary)]">
-                      Traditional modal dialog
-                    </div>
+                <div className="p-3 rounded-lg bg-[var(--bg-tertiary)]">
+                  <div className="font-medium">Gmail-style Inline</div>
+                  <div className="text-sm text-[var(--text-tertiary)]">
+                    Compose messages in the bottom corner like Gmail
                   </div>
-                </label>
-                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
-                  <input
-                    type="radio"
-                    name="composerMode"
-                    value="inline"
-                    checked={composerMode === 'inline'}
-                    onChange={() => setComposerMode('inline')}
-                  />
-                  <div>
-                    <div className="font-medium">Inline</div>
-                    <div className="text-sm text-[var(--text-tertiary)]">
-                      Gmail-style bottom corner
-                    </div>
-                  </div>
-                </label>
-                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
-                  <input
-                    type="radio"
-                    name="composerMode"
-                    value="facebook"
-                    checked={composerMode === 'facebook'}
-                    onChange={() => setComposerMode('facebook')}
-                    disabled
-                  />
-                  <div>
-                    <div className="font-medium">Chat Heads</div>
-                    <div className="text-sm text-[var(--text-tertiary)]">
-                      Facebook-style floating bubbles (coming soon)
-                    </div>
-                  </div>
-                </label>
+                </div>
               </div>
             </div>
             
