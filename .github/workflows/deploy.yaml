@@ -24,8 +24,8 @@ jobs:
           port: ${{ secrets.DEPLOY_PORT }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_KEY }}
-          source: "webjmail.tar.gz,compose.yaml"
-          target: "/home/${{ secrets.DEPLOY_USER }}/gh/webjmail"
+          source: 'webjmail.tar.gz,compose.yaml'
+          target: '/home/${{ secrets.DEPLOY_USER }}/gh/webjmail'
 
       - name: Run container
         uses: appleboy/ssh-action@v1.0.0
@@ -38,5 +38,6 @@ jobs:
             cd /home/${{ secrets.DEPLOY_USER }}/gh/webjmail
             docker load < webjmail.tar.gz
             docker tag webjmail:${{ github.sha }} webjmail:latest
+            docker compose down
             docker compose up -d
             docker system prune -f
