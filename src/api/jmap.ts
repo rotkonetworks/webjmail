@@ -51,9 +51,9 @@ export class JMAPClient {
 
       try {
         this.session = JSON.parse(responseText)
-        // Fix HTTP URLs to HTTPS in production
-        if (!import.meta.env.DEV && this.session.apiUrl?.startsWith('http://')) {
-          console.log('[Auth] Fixing mixed content - converting HTTP URLs to HTTPS')
+
+        if (this.session.apiUrl?.includes(':8080')) {
+          console.log('[Auth] Fixing URLs - removing port and ensuring HTTPS')
           this.session.apiUrl = this.session.apiUrl
             .replace('http://', 'https://')
             .replace(':8080', '')
@@ -72,7 +72,15 @@ export class JMAPClient {
               .replace('http://', 'https://')
               .replace(':8080', '')
           }
+        } else {
+          console.log(
+            '[Auth] NOT fixing URLs - protocol:',
+            window.location.protocol,
+            'apiUrl starts with:',
+            this.session.apiUrl?.substring(0, 8)
+          )
         }
+
         console.log('[Auth] Parsed session:', this.session)
 
         // Store auth token for future requests
