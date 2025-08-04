@@ -51,8 +51,8 @@ export class JMAPClient {
 
       try {
         this.session = JSON.parse(responseText)
-        // Force HTTPS URLs if we're in production and getting HTTP URLs
-        if (window.location.protocol === 'https:' && this.session.apiUrl?.startsWith('http://')) {
+        // Fix HTTP URLs to HTTPS in production
+        if (!import.meta.env.DEV && this.session.apiUrl?.startsWith('http://')) {
           console.log('[Auth] Fixing mixed content - converting HTTP URLs to HTTPS')
           this.session.apiUrl = this.session.apiUrl
             .replace('http://', 'https://')
@@ -113,7 +113,7 @@ export class JMAPClient {
         console.log('[JMAP] Using proxied path:', urlObj.pathname)
         return urlObj.pathname
       }
-      //
+
       // For local development, keep the full URL
       if (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') {
         return url
