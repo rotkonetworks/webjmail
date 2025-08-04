@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 RUN npm install -g bun && bun install --frozen-lockfile
 COPY . .
-RUN bun run vite build
+RUN bun run build
 
 # Production stage
 FROM nginx:alpine

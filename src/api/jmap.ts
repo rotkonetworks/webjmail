@@ -8,12 +8,11 @@ export class JMAPClient {
 
   async authenticate(serverUrl: string, username: string, password: string) {
     // In production, always use the proxy path
-    const authUrl = import.meta.env.PROD && serverUrl.includes('mail.rotko.net') 
-      ? '/.well-known/jmap' 
-      : serverUrl
-    
+    const authUrl =
+      import.meta.env.PROD && serverUrl.includes('mail.rotko.net') ? '/.well-known/jmap' : serverUrl
+
     const token = 'Basic ' + btoa(username + ':' + password)
-    
+
     console.log('[Auth] Authenticating with:', {
       originalUrl: serverUrl,
       actualUrl: authUrl,
@@ -25,8 +24,8 @@ export class JMAPClient {
       const response = await fetch(authUrl, {
         method: 'GET',
         headers: {
-          'Authorization': token,
-          'Accept': 'application/json',
+          Authorization: token,
+          Accept: 'application/json',
         },
         credentials: 'include',
       })
@@ -34,7 +33,7 @@ export class JMAPClient {
       if (!response.ok) {
         const errorText = await response.text()
         console.error('[Auth] Failed:', response.status, errorText)
-        
+
         if (response.status === 401) {
           throw new Error('Invalid username or password')
         }
@@ -52,8 +51,30 @@ export class JMAPClient {
 
       try {
         this.session = JSON.parse(responseText)
+        // Force HTTPS URLs if we're in production and getting HTTP URLs
+        if (window.location.protocol === 'https:' && this.session.apiUrl?.startsWith('http://')) {
+          console.log('[Auth] Fixing mixed content - converting HTTP URLs to HTTPS')
+          this.session.apiUrl = this.session.apiUrl
+            .replace('http://', 'https://')
+            .replace(':8080', '')
+          if (this.session.downloadUrl) {
+            this.session.downloadUrl = this.session.downloadUrl
+              .replace('http://', 'https://')
+              .replace(':8080', '')
+          }
+          if (this.session.uploadUrl) {
+            this.session.uploadUrl = this.session.uploadUrl
+              .replace('http://', 'https://')
+              .replace(':8080', '')
+          }
+          if (this.session.eventSourceUrl) {
+            this.session.eventSourceUrl = this.session.eventSourceUrl
+              .replace('http://', 'https://')
+              .replace(':8080', '')
+          }
+        }
         console.log('[Auth] Parsed session:', this.session)
-        
+
         // Store auth token for future requests
         this.accessToken = token
         this.baseUrl = window.location.origin // Use current origin as base
@@ -85,19 +106,19 @@ export class JMAPClient {
     try {
       const urlObj = new URL(url, this.baseUrl || window.location.origin)
       console.log('[JMAP] Original URL:', url)
-      
+
       // If it's a mail.rotko.net URL, use the proxy path
-      if (urlObj.hostname === 'mail.rotko.net') {
+      if (urlObj.hostname === 'mail.rotko.net' || urlObj.host === 'mail.rotko.net:8080') {
         // Return just the pathname to use local proxy
         console.log('[JMAP] Using proxied path:', urlObj.pathname)
         return urlObj.pathname
       }
-      
+      //
       // For local development, keep the full URL
       if (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') {
         return url
       }
-      
+
       // Default to pathname for safety
       return urlObj.pathname
     } catch (e) {
@@ -128,9 +149,9 @@ export class JMAPClient {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Authorization': this.accessToken,
+          Authorization: this.accessToken,
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          Accept: 'application/json',
         },
         credentials: 'include',
         body: JSON.stringify(request),
@@ -149,7 +170,7 @@ export class JMAPClient {
           this.session = null
           throw new Error('Authentication failed. Please login again.')
         }
-        
+
         throw new Error(`Request failed: ${response.statusText} (${response.status})`)
       }
 
@@ -180,7 +201,7 @@ export class JMAPClient {
 
     // Build the EventSource URL properly
     let eventSourceUrl = this.session.eventSourceUrl
-    
+
     // Replace URL template parameters
     eventSourceUrl = eventSourceUrl
       .replace('{types}', types.join(','))
@@ -219,7 +240,7 @@ export class JMAPClient {
     eventSource.addEventListener('error', (event) => {
       console.error('[EventSource] Connection error:', event)
       console.error('[EventSource] ReadyState:', eventSource.readyState)
-      
+
       // ReadyState values: 0=CONNECTING, 1=OPEN, 2=CLOSED
       switch (eventSource.readyState) {
         case EventSource.CONNECTING:
@@ -240,7 +261,7 @@ export class JMAPClient {
   // Rest of your JMAP methods remain the same...
   async getMailboxes(accountId: string): Promise<Mailbox[]> {
     console.log('[JMAP] Getting mailboxes for account:', accountId)
-    
+
     const responses = await this.request([
       [
         'Mailbox/get',
