@@ -37,7 +37,7 @@ jobs:
           script: |
             cd /home/${{ secrets.DEPLOY_USER }}/gh/webjmail
             docker load < webjmail.tar.gz
-            docker tag webjmail:${{ github.sha }} webjmail:latest
+            docker tag webjmail:${{ github.sha }} rotko/webjmail:latest
             docker compose down
             docker compose up -d
             docker system prune -f
