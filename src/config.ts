@@ -1,9 +1,7 @@
 // Application configuration
 export const config = {
-  // Default JMAP server - use proxy in development
-  defaultServer: import.meta.env.DEV
-    ? '/.well-known/jmap' // This will be proxied by Vite
-    : import.meta.env.VITE_JMAP_SERVER || 'https://mail.rotko.net/.well-known/jmap',
+  // Always use proxy path to avoid CORS issues
+  defaultServer: '/.well-known/jmap',
 
   // App branding
   appName: 'Rotko Mail',
@@ -62,17 +60,12 @@ export const config = {
   debug: import.meta.env.DEV,
 }
 
-// Server presets for quick switching
+// Server presets for quick switching - always use proxy
 export const serverPresets = [
   {
-    name: 'Rotko Mail (Dev Proxy)',
+    name: 'Rotko Mail',
     url: '/.well-known/jmap',
-    description: 'Uses Vite proxy to avoid CORS',
-  },
-  {
-    name: 'Rotko Mail (Direct)',
-    url: 'https://mail.rotko.net/.well-known/jmap',
-    description: 'Direct connection (may have CORS issues)',
+    description: 'Connect via webmail.rotko.net proxy',
   },
   {
     name: 'Local Stalwart',
