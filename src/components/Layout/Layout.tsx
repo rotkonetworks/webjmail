@@ -1,4 +1,3 @@
-// src/components/Layout/Layout.tsx
 import { useState, useEffect, useCallback, memo } from 'react'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
@@ -10,6 +9,8 @@ import { SettingsPanel } from './SettingsPanel'
 import { ResizablePane } from './ResizablePane'
 import { useMailStore } from '../../stores/mailStore'
 import { useUIStore } from '../../stores/uiStore'
+import { MobileBottomNav } from './MobileBottomNav'
+import { useDeviceType } from '../../hooks/useDeviceType'
 
 interface Composer {
   id: string
@@ -27,7 +28,7 @@ const MemoizedSettingsPanel = memo(SettingsPanel)
 export function Layout() {
   const selectedEmailId = useMailStore((state) => state.selectedEmailId)
   const selectEmail = useMailStore((state) => state.selectEmail)
-  const viewMode = useUIStore((state) => state.viewMode)
+  const desktopViewMode = useUIStore((state) => state.viewMode)
   const theme = useUIStore((state) => state.theme)
   const font = useUIStore((state) => state.font)
   const sidebarWidth = useUIStore((state) => state.sidebarWidth)
@@ -38,8 +39,10 @@ export function Layout() {
   const [showComposer, setShowComposer] = useState(false)
   const [composers, setComposers] = useState<Composer[]>([])
   const [showSettings, setShowSettings] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
-  const [isTablet, setIsTablet] = useState(false)
+  const isMobile = useDeviceType()
+  
+  // Force row mode on mobile
+  const viewMode = isMobile ? 'row' : desktopViewMode
   
   // Apply theme and font to document
   useEffect(() => {
@@ -50,19 +53,6 @@ export function Layout() {
     }
     document.documentElement.setAttribute('data-font', font)
   }, [theme, font])
-  
-  // Responsive design detection
-  useEffect(() => {
-    const checkScreenSize = () => {
-      const width = window.innerWidth
-      setIsMobile(width < 768)
-      setIsTablet(width >= 768 && width < 1024)
-    }
-    
-    checkScreenSize()
-    window.addEventListener('resize', checkScreenSize)
-    return () => window.removeEventListener('resize', checkScreenSize)
-  }, [])
   
   // Memoized callbacks
   const handleEmailSelect = useCallback((emailId: string) => {
@@ -137,8 +127,8 @@ export function Layout() {
       
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar - responsive visibility */}
-        {(!isMobile || viewMode === 'column') && (
+        {/* Sidebar - hide on mobile */}
+        {!isMobile && (
           <ResizablePane
             width={sidebarWidth}
             minWidth={180}
@@ -224,14 +214,19 @@ export function Layout() {
         )}
       </div>
       
+      {/* Mobile bottom navigation */}
+      {isMobile && !selectedEmailId && (
+        <MobileBottomNav />
+      )}
+      
       {/* Inline Composers - responsive positioning */}
       {composers.map((composer, index) => (
         <div
           key={composer.id}
           style={{
             bottom: composer.isMinimized ? `${index * 50}px` : `${index * 100}px`,
-            right: isMobile ? '8px' : `${(index * 20) + 16}px`,
-            left: isMobile ? '8px' : 'auto',
+            right: isMobile ? '0' : `${(index * 20) + 16}px`,
+            left: isMobile ? '0' : 'auto',
             zIndex: 100 + index,
           }}
           className="fixed"

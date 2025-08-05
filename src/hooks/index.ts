@@ -2,6 +2,7 @@
 export { usePrimaryAccountId } from './usePrimaryAccountId'
 export { useMailboxes } from './useMailboxes'
 export { useManualRefresh } from './useManualRefresh'
+export { useDeviceType } from './useDeviceType'
 
 // Email hooks
 export { useEmails } from './email/useEmails'

@@ -500,3 +500,62 @@ input[type='radio']:checked::after {
 .timeline-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
 }
+
+/* Mobile-specific adjustments */
+@media (max-width: 768px) {
+  /* Hide desktop-only elements */
+  .timeline-scrollbar,
+  .timeline-marker::before,
+  .email-timeline::before,
+  .search-input {
+    display: none;
+  }
+  
+  /* Larger touch targets */
+  .email-item {
+    padding: 1rem;
+    min-height: 80px;
+  }
+  
+  button {
+    min-height: 44px;
+  }
+  
+  /* Full width composer */
+  .fixed[style*="right"] {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+  }
+  
+  /* Better mobile scrolling */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* No hover effects on touch devices */
+  @media (hover: none) {
+    .email-item:hover {
+      background: inherit;
+    }
+    
+    button:hover {
+      background: inherit;
+    }
+  }
+  
+  /* Adjust header for mobile */
+  .compose-btn span {
+    display: none;
+  }
+  
+  /* Mobile-optimized empty state */
+  .empty-state {
+    padding: 24px;
+  }
+  
+  .empty-state-icon {
+    font-size: 48px;
+  }
+}

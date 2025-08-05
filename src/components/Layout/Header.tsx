@@ -64,7 +64,7 @@ export const Header = memo(function Header({ onCompose, onSettings }: HeaderProp
   return (
     <header className="h-[var(--header-height)] bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex items-center px-4 gap-4">
       {/* Logo */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <div className="w-9 h-9 bg-[var(--proton-purple)] rounded-lg flex items-center justify-center">
           <div className="i-lucide:mail text-white text-lg" />
         </div>
