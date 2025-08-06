@@ -10,6 +10,7 @@ interface AuthState {
   sessionInfo: {
     server: string
     username: string
+    token: string
   } | null
   isLoading: boolean
   error: string | null
@@ -35,6 +36,7 @@ export const useAuthStore = create<AuthState>()(
           console.log('[AuthStore] Attempting login:', { server, username })
           
           const session = await jmapClient.authenticate(server, username, password)
+          const token = 'Basic ' + btoa(username + ':' + password)
           
           console.log('[AuthStore] Login successful, session:', {
             username: session?.username,
@@ -46,7 +48,7 @@ export const useAuthStore = create<AuthState>()(
           set({
             isAuthenticated: true,
             session,
-            sessionInfo: { server, username },
+            sessionInfo: { server, username, token },
             isLoading: false,
             error: null,
           })
@@ -73,6 +75,9 @@ export const useAuthStore = create<AuthState>()(
         // Clear IndexedDB for security on logout
         indexedDB.deleteDatabase('rotko-webmail')
         
+        // Clear the JMAP client session
+        jmapClient.clearSession()
+        
         set({
           isAuthenticated: false,
           session: null,
@@ -84,19 +89,45 @@ export const useAuthStore = create<AuthState>()(
       clearError: () => set({ error: null }),
 
       restoreSession: async () => {
-        const { sessionInfo } = get()
+        const state = get()
         
-        if (sessionInfo) {
-          if (import.meta.env.DEV) {
-            console.log('[AuthStore] Session info found, but auto-login disabled for security')
+        if (state.sessionInfo && state.sessionInfo.token) {
+          set({ isLoading: true })
+          
+          try {
+            console.log('[AuthStore] Restoring session for:', state.sessionInfo.username)
+            
+            // Restore the session using the stored token
+            const session = await jmapClient.restoreSession(
+              state.sessionInfo.server,
+              state.sessionInfo.token
+            )
+            
+            console.log('[AuthStore] Session restored successfully')
+            
+            set({
+              isAuthenticated: true,
+              session,
+              isLoading: false,
+              error: null,
+            })
+          } catch (error) {
+            console.error('[AuthStore] Failed to restore session:', error)
+            
+            // Clear invalid session
+            set({
+              isAuthenticated: false,
+              session: null,
+              sessionInfo: null,
+              isLoading: false,
+              error: null,
+            })
           }
-          // For security, we no longer automatically restore sessions
-          // User must re-authenticate after browser restart
-          set({ sessionInfo: null })
         } else {
           if (import.meta.env.DEV) {
-            console.log('[AuthStore] No stored session info to restore')
+            console.log('[AuthStore] No stored session to restore')
           }
+          set({ isLoading: false })
         }
       },
     }),
@@ -104,6 +135,8 @@ export const useAuthStore = create<AuthState>()(
       name: 'jmap-auth',
       partialize: (state) => ({
         sessionInfo: state.sessionInfo,
+        isAuthenticated: state.isAuthenticated,
+        session: state.session,
       }),
     }
   )

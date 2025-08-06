@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import React from 'react'
 import { useMailStore } from '../../stores/mailStore'
 import { useUIStore } from '../../stores/uiStore'
 import {
@@ -345,13 +346,17 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
     )
   }
 
-  const displayEmails = (threadEmails || [email]).sort(
-    (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-  )
+  const displayEmails = React.useMemo(() => {
+    const emails = threadEmails || [email]
+    // Sort chronologically (oldest first)
+    return [...emails].sort(
+      (a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime()
+    )
+  }, [threadEmails, email])
 
   return (
-    <div className="h-full flex">
-      <div className="flex-1 flex flex-col">
+    <div className="h-full flex flex-col md:flex-row">
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
         {/* Action bar */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)]">
           <div className="flex items-center gap-2">
@@ -425,7 +430,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
 
         {/* Email thread */}
         <div className="flex-1 overflow-y-auto timeline-scrollbar" ref={timelineRef}>
-          <div className="email-timeline max-w-4xl mx-auto pt-4 pb-6 px-6">
+          <div className="email-timeline max-w-4xl mx-auto pt-4 pb-6 px-4 md:px-6">
             {displayEmails.map((threadEmail, index) => {
               const isExpanded = expandedEmails.has(threadEmail.id)
               const isCurrent = threadEmail.id === email.id
@@ -436,36 +441,36 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
                 <div
                   key={threadEmail.id}
                   ref={(el) => { if (el) emailRefs.current.set(threadEmail.id, el) }}
-                  className={`timeline-marker mb-6 ${isLatest ? 'slide-in' : ''}`}
+                  className={`timeline-marker mb-4 md:mb-6 ${isLatest ? 'slide-in' : ''}`}
                 >
                   <div
                     onClick={() => toggleEmailExpansion(threadEmail.id)}
                     className={`
-                      bg-[var(--bg-secondary)] rounded-lg p-4 cursor-pointer
-                      hover:bg-[var(--bg-tertiary)]
-                      ${isCurrent ? 'ring-2 ring-[var(--primary-color)]' : ''}
-                    `}
+bg-[var(--bg-secondary)] rounded-lg p-3 md:p-4 cursor-pointer
+hover:bg-[var(--bg-tertiary)]
+${isCurrent ? 'ring-2 ring-[var(--primary-color)]' : ''}
+`}
                   >
                     <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-start gap-2 md:gap-3">
                         <div
                           className={`
-                          w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0
-                          ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
-                        `}
+w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-medium flex-shrink-0
+${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
+`}
                         >
                           {(sender?.name || sender?.email || 'U').charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div className="font-medium text-[var(--text-primary)]">
+                          <div className="font-medium text-[var(--text-primary)] text-sm md:text-base">
                             {sender?.name || sender?.email || 'Unknown'}
                           </div>
-                          <div className="text-sm text-[var(--text-tertiary)]">
+                          <div className="text-xs md:text-sm text-[var(--text-tertiary)]">
                             {sender?.email}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-[var(--text-tertiary)]">
+                      <div className="flex items-center gap-2 text-xs md:text-sm text-[var(--text-tertiary)]">
                         <span>
                           {format(new Date(threadEmail.receivedAt), isMobile ? 'MMM d' : 'MMM d, yyyy at HH:mm')}
                         </span>
@@ -508,7 +513,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
                             <div className="i-lucide:paperclip" />
                             Attachments ({threadEmail.attachments.length})
                           </h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
                             {threadEmail.attachments.map((attachment: any) => (
                               <button
                                 key={attachment.partId}
@@ -590,9 +595,9 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
                   >
                     <div
                       className={`
-                      w-3 h-3 rounded-full group-hover:scale-110
-                      ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
-                    `}
+w-3 h-3 rounded-full group-hover:scale-110
+${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
+`}
                     />
                     <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 whitespace-nowrap text-xs bg-black/80 px-2 py-1 rounded">
                       {format(date, 'MMM d')}

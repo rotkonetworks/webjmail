@@ -80,6 +80,48 @@ export class JMAPClient {
     }
   }
 
+  async restoreSession(serverUrl: string, token: string) {
+    // Restore session using stored token
+    const authUrl = import.meta.env.PROD && serverUrl.includes('mail.rotko.net') 
+      ? '/.well-known/jmap' 
+      : serverUrl
+    
+    console.log('[Auth] Restoring session with stored token')
+
+    try {
+      const response = await fetch(authUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': token,
+          'Accept': 'application/json',
+        },
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        console.error('[Auth] Session restore failed:', response.status)
+        throw new Error('Session expired or invalid')
+      }
+
+      const responseText = await response.text()
+      this.session = JSON.parse(responseText)
+      this.accessToken = token
+      this.baseUrl = window.location.origin
+
+      console.log('[Auth] Session restored successfully')
+      return this.session
+    } catch (error) {
+      console.error('[Auth] Failed to restore session:', error)
+      throw error
+    }
+  }
+
+  clearSession() {
+    this.session = null
+    this.accessToken = ''
+    this.baseUrl = ''
+  }
+
   private getProxiedUrl(url: string): string {
     // Always use proxy paths to avoid CORS
     try {

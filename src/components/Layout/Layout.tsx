@@ -188,12 +188,10 @@ export function Layout() {
             <div className="flex-1 bg-[var(--bg-secondary)] overflow-hidden relative">
               {selectedEmailId ? (
                 // Show email view in the same space
-                <div className="h-full bg-[var(--bg-primary)]">
-                  <MemoizedMessageView 
-                    onClose={handleCloseEmail} 
-                    onReply={handleReply}
-                  />
-                </div>
+                <MemoizedMessageView
+                  onClose={handleCloseEmail}
+                  onReply={handleReply}
+                />
               ) : (
                 // Show message list
                 <MemoizedMessageList

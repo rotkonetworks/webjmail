@@ -7,11 +7,19 @@ import { useUIStore } from '../../stores/uiStore'
 import { Mailbox } from '../../api/types'
 
 export function Sidebar() {
-  const { data: mailboxes, isLoading } = useMailboxes()
+  const { data: mailboxes, isLoading, error } = useMailboxes()
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
   const selectMailbox = useMailStore((state) => state.selectMailbox)
   const logout = useAuthStore((state) => state.logout)
   const sidebarOpen = useUIStore((state) => state.sidebarOpen)
+  
+  // Debug logging
+  React.useEffect(() => {
+    console.log('[Sidebar] Mailboxes data:', mailboxes)
+    console.log('[Sidebar] Loading:', isLoading)
+    console.log('[Sidebar] Error:', error)
+    console.log('[Sidebar] Selected mailbox:', selectedMailboxId)
+  }, [mailboxes, isLoading, error, selectedMailboxId])
   
   // Check if mobile
   const [isMobile, setIsMobile] = React.useState(false)
@@ -27,7 +35,11 @@ export function Sidebar() {
     if (!selectedMailboxId && mailboxes && mailboxes.length > 0) {
       const inbox = mailboxes.find((m) => m.role === 'inbox')
       if (inbox) {
+        console.log('[Sidebar] Auto-selecting inbox:', inbox.id)
         selectMailbox(inbox.id)
+      } else {
+        console.log('[Sidebar] No inbox found, selecting first mailbox')
+        selectMailbox(mailboxes[0].id)
       }
     }
   }, [mailboxes, selectedMailboxId, selectMailbox])
@@ -35,6 +47,8 @@ export function Sidebar() {
   // Sort mailboxes with custom order
   const sortedMailboxes = React.useMemo(() => {
     if (!mailboxes) return []
+    
+    console.log('[Sidebar] Sorting mailboxes:', mailboxes.length)
     
     // Define the order for special mailboxes
     const roleOrder: Record<string, number> = {
@@ -112,11 +126,29 @@ export function Sidebar() {
   
   if (isLoading) {
     return (
-      <div className="w-[var(--sidebar-width)] bg-[var(--bg-secondary)] border-r border-[var(--border-color)] p-4">
+      <div className="w-full bg-[var(--bg-secondary)] border-r border-[var(--border-color)] p-4">
         <div className="animate-spin i-eos-icons:loading text-xl text-[var(--text-tertiary)]" />
       </div>
     )
   }
+  
+  if (error) {
+    return (
+      <div className="w-full bg-[var(--bg-secondary)] border-r border-[var(--border-color)] p-4">
+        <div className="text-red-500">Error loading mailboxes</div>
+      </div>
+    )
+  }
+  
+  if (!mailboxes || mailboxes.length === 0) {
+    return (
+      <div className="w-full bg-[var(--bg-secondary)] border-r border-[var(--border-color)] p-4">
+        <div className="text-[var(--text-tertiary)]">No mailboxes found</div>
+      </div>
+    )
+  }
+  
+  console.log('[Sidebar] Rendering with', sortedMailboxes.length, 'sorted mailboxes')
   
   return (
     <div className={`
