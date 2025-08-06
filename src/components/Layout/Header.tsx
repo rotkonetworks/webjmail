@@ -1,8 +1,8 @@
-// src/components/Layout/Header.tsx - Updated with search store
 import React, { useRef, useEffect, useState, memo, useCallback } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useManualRefresh } from '../../hooks'
 import { useSearchStore } from '../../stores/searchStore'
+import { useDeviceType } from '../../hooks/useDeviceType'
 import { config } from '../../config'
 
 interface HeaderProps {
@@ -15,6 +15,7 @@ export const Header = memo(function Header({ onCompose, onSettings }: HeaderProp
   const searchRef = useRef<HTMLInputElement>(null)
   const manualRefresh = useManualRefresh()
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const isMobile = useDeviceType()
   
   // Use search store
   const searchQuery = useSearchStore((state) => state.query)
@@ -61,10 +62,49 @@ export const Header = memo(function Header({ onCompose, onSettings }: HeaderProp
   const username = session?.username || 'User'
   const firstLetter = username.charAt(0).toUpperCase()
 
+  if (isMobile) {
+    // Simplified mobile header
+    return (
+      <header className="h-14 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex items-center justify-between px-3">
+        {/* Logo only */}
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-[var(--proton-purple)] rounded-lg flex items-center justify-center">
+            <div className="i-lucide:mail text-white text-base" />
+          </div>
+          <span className="font-semibold">{config.appName}</span>
+        </div>
+
+        {/* Right side actions */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+            title="Refresh"
+          >
+            <div className={`i-lucide:refresh-cw text-sm ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+
+          <button
+            onClick={onCompose}
+            className="p-2 hover:bg-white/10 rounded-lg bg-[var(--primary-color)]"
+          >
+            <div className="i-lucide:edit-3 text-white text-sm" />
+          </button>
+
+          <button onClick={onSettings} className="p-2 hover:bg-white/10 rounded-lg" title="Settings">
+            <div className="i-lucide:settings text-sm" />
+          </button>
+        </div>
+      </header>
+    )
+  }
+
+  // Desktop header
   return (
     <header className="h-[var(--header-height)] bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex items-center px-4 gap-4">
       {/* Logo */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <div className="w-9 h-9 bg-[var(--proton-purple)] rounded-lg flex items-center justify-center">
           <div className="i-lucide:mail text-white text-lg" />
         </div>
@@ -117,7 +157,7 @@ export const Header = memo(function Header({ onCompose, onSettings }: HeaderProp
 
         {/* User Menu */}
         <div className="flex items-center gap-3 ml-4">
-          <div className="w-8 h-8 bg-[var(--proton-purple)] rounded-full flex items-center justify-center text-sm font-medium">
+          <div className="w-8 h-8 bg-[var(--primary-color)] rounded-full flex items-center justify-center text-sm font-medium">
             {firstLetter}
           </div>
           <span className="text-sm text-[var(--text-secondary)]">{username}</span>

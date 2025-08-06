@@ -456,8 +456,32 @@ input[type='radio']:checked::after {
   height: auto;
 }
 
+.prose .table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 1rem 0;
+}
+
+.prose table {
+  min-width: 100%;
+  table-layout: auto;
+}
+
+@media (max-width: 768px) {
+  .prose table {
+    font-size: 0.875rem;
+  }
+  .prose td,
+  .prose th {
+    padding: 0.25rem;
+    white-space: nowrap;
+  }
+}
 .prose table {
   width: 100%;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border-collapse: collapse;
 }
 
