@@ -54,7 +54,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
   // Expand current email by default
   useEffect(() => {
     if (email) {
-      if (threadEmails && threadEmails.length > 1) {
+      if (threadEmails && Array.isArray(threadEmails) && threadEmails.length > 1) {
         setExpandedEmails(new Set([email.id]))
         setTimeout(() => {
           const element = emailRefs.current.get(email.id)
@@ -82,8 +82,8 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
             img.src = src
             img.style.maxWidth = '100%'
             img.style.height = 'auto'
-            if (width !== 'auto') img.setAttribute('width', width)
-            if (height !== 'auto') img.setAttribute('height', height)
+            if (width && width !== 'auto') img.setAttribute('width', width)
+            if (height && height !== 'auto') img.setAttribute('height', height)
             
             wrapper.replaceWith(img)
           }
@@ -347,7 +347,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
   }
 
   const displayEmails = React.useMemo(() => {
-    const emails = threadEmails || [email]
+    const emails = Array.isArray(threadEmails) ? threadEmails : [email]
     // Sort chronologically (oldest first)
     return [...emails].sort(
       (a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime()
@@ -493,13 +493,13 @@ ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
                           {threadEmail.to && threadEmail.to.length > 0 && (
                             <div>
                               <span className="font-medium">To:</span>{' '}
-                              {threadEmail.to.map((r) => r.name || r.email).join(', ')}
+                              {threadEmail.to.map((r: any) => r.name || r.email).join(', ')}
                             </div>
                           )}
                           {threadEmail.cc && threadEmail.cc.length > 0 && (
                             <div>
                               <span className="font-medium">Cc:</span>{' '}
-                              {threadEmail.cc.map((r) => r.name || r.email).join(', ')}
+                              {threadEmail.cc.map((r: any) => r.name || r.email).join(', ')}
                             </div>
                           )}
                         </div>

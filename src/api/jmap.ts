@@ -52,11 +52,13 @@ export class JMAPClient {
       try {
         this.session = JSON.parse(responseText)
 
-        if (this.session.apiUrl?.includes(':8080')) {
+        if (this.session?.apiUrl?.includes(':8080')) {
           console.log('[Auth] Fixing URLs - removing port and ensuring HTTPS')
-          this.session.apiUrl = this.session.apiUrl
-            .replace('http://', 'https://')
-            .replace(':8080', '')
+          if (this.session.apiUrl) {
+            this.session.apiUrl = this.session.apiUrl
+              .replace('http://', 'https://')
+              .replace(':8080', '')
+          }
           if (this.session.downloadUrl) {
             this.session.downloadUrl = this.session.downloadUrl
               .replace('http://', 'https://')
@@ -77,7 +79,7 @@ export class JMAPClient {
             '[Auth] NOT fixing URLs - protocol:',
             window.location.protocol,
             'apiUrl starts with:',
-            this.session.apiUrl?.substring(0, 8)
+            this.session?.apiUrl?.substring(0, 8)
           )
         }
 
