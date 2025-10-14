@@ -1,4 +1,4 @@
-// src/api/jmap.ts - Fixed to always use proxy in production
+// src/api/jmap.ts - Fixed EventSource implementation
 import { JMAPSession, Email, Mailbox, JMAPRequest, JMAPResponse } from './types'
 
 export class JMAPClient {
@@ -7,21 +7,17 @@ export class JMAPClient {
   private baseUrl: string = ''
 
   async authenticate(serverUrl: string, username: string, password: string) {
-    // In production, always use the proxy path
-    const authUrl =
-      import.meta.env.PROD && serverUrl.includes('mail.rotko.net') ? '/.well-known/jmap' : serverUrl
-
+    // Ensure proper Basic auth format (exactly one space after "Basic")
     const token = 'Basic ' + btoa(username + ':' + password)
 
     console.log('[Auth] Authenticating with:', {
-      originalUrl: serverUrl,
-      actualUrl: authUrl,
+      serverUrl,
       username,
       tokenFormat: token.substring(0, 10) + '...',
     })
 
     try {
-      const response = await fetch(authUrl, {
+      const response = await fetch(serverUrl, {
         method: 'GET',
         headers: {
           Authorization: token,
@@ -87,7 +83,7 @@ export class JMAPClient {
 
         // Store auth token for future requests
         this.accessToken = token
-        this.baseUrl = window.location.origin // Use current origin as base
+        this.baseUrl = serverUrl.replace('/.well-known/jmap', '')
 
         // Validate session structure
         if (!this.session?.apiUrl) {
@@ -154,29 +150,24 @@ export class JMAPClient {
   }
 
   private getProxiedUrl(url: string): string {
-    // Always use proxy paths to avoid CORS
-    try {
-      const urlObj = new URL(url, this.baseUrl || window.location.origin)
-      console.log('[JMAP] Original URL:', url)
-
-      // If it's a mail.rotko.net URL, use the proxy path
-      if (urlObj.hostname === 'mail.rotko.net' || urlObj.host === 'mail.rotko.net:8080') {
-        // Return just the pathname to use local proxy
-        console.log('[JMAP] Using proxied path:', urlObj.pathname)
-        return urlObj.pathname
+    // In development, use the proxy path instead of the full URL
+    if (import.meta.env.DEV) {
+      try {
+        const urlObj = new URL(url, this.baseUrl || window.location.origin)
+        console.log('[JMAP] Original URL:', url)
+        console.log('[JMAP] Parsed URL:', urlObj.href)
+        
+        // Check if this is a mail.rotko.net URL
+        if (urlObj.hostname === 'mail.rotko.net' || urlObj.hostname === 'localhost') {
+          // Return just the pathname (e.g., /jmap/)
+          console.log('[JMAP] Using proxied path:', urlObj.pathname)
+          return urlObj.pathname
+        }
+      } catch (e) {
+        console.error('[JMAP] URL parsing error:', e)
       }
-
-      // For local development, keep the full URL
-      if (urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1') {
-        return url
-      }
-
-      // Default to pathname for safety
-      return urlObj.pathname
-    } catch (e) {
-      console.error('[JMAP] URL parsing error:', e)
-      return url
     }
+    return url
   }
 
   async request(methodCalls: Array<[string, any, string]>) {
@@ -247,7 +238,7 @@ export class JMAPClient {
     }
   }
 
-  // Fixed EventSource implementation with proxy support
+  // Fixed EventSource implementation with authentication workaround
   createEventSource(types: string[] = ['*']): EventSource {
     if (!this.session) throw new Error('Not authenticated')
 
@@ -263,8 +254,24 @@ export class JMAPClient {
     console.log('[EventSource] Original URL template:', this.session.eventSourceUrl)
     console.log('[EventSource] Processed URL:', eventSourceUrl)
 
-    // Use proxy for EventSource too
-    eventSourceUrl = this.getProxiedUrl(eventSourceUrl)
+    // Handle proxy in development
+    if (import.meta.env.DEV) {
+      try {
+        const urlObj = new URL(eventSourceUrl, this.baseUrl || window.location.origin)
+        
+        // For EventSource in dev, we need to pass auth as a query parameter
+        // because EventSource doesn't support custom headers
+        const authToken = this.accessToken.replace('Basic ', '')
+        urlObj.searchParams.set('authorization', authToken)
+        
+        // Use the proxied path with query parameters
+        eventSourceUrl = urlObj.pathname + urlObj.search
+        console.log('[EventSource] Using proxied EventSource URL:', eventSourceUrl)
+      } catch (e) {
+        console.error('[EventSource] URL processing error:', e)
+      }
+    }
+
     console.log('[EventSource] Final URL:', eventSourceUrl)
 
     // Create the EventSource
@@ -515,7 +522,6 @@ export class JMAPClient {
       .replace('{type}', encodeURIComponent(type))
       .replace('{name}', encodeURIComponent(name))
 
-    // Use proxy for blob URLs too
     url = this.getProxiedUrl(url)
     return url
   }
