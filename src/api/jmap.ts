@@ -48,34 +48,42 @@ export class JMAPClient {
       try {
         this.session = JSON.parse(responseText)
 
-        if (this.session?.apiUrl?.includes(':8080')) {
-          console.log('[Auth] Fixing URLs - removing port and ensuring HTTPS')
+        if (window.location.protocol === 'https:' && this.session?.apiUrl?.startsWith('http://')) {
+          const fixUrl = (url: string): string => {
+            if (!url) return url
+
+            try {
+              const urlObj = new URL(url)
+              if (urlObj.protocol === 'http:' && urlObj.hostname === 'mail.rotko.net') {
+                urlObj.protocol = 'https:'
+                urlObj.port = ''
+                return urlObj.toString()
+              }
+            } catch (e) {
+              return url.replace(/^http:/, 'https:').replace(/:\d+\//, '/')
+            }
+            return url
+          }
+
           if (this.session.apiUrl) {
-            this.session.apiUrl = this.session.apiUrl
-              .replace('http://', 'https://')
-              .replace(':8080', '')
+            const original = this.session.apiUrl
+            this.session.apiUrl = fixUrl(this.session.apiUrl)
           }
           if (this.session.downloadUrl) {
-            this.session.downloadUrl = this.session.downloadUrl
-              .replace('http://', 'https://')
-              .replace(':8080', '')
+            this.session.downloadUrl = fixUrl(this.session.downloadUrl)
           }
           if (this.session.uploadUrl) {
-            this.session.uploadUrl = this.session.uploadUrl
-              .replace('http://', 'https://')
-              .replace(':8080', '')
+            this.session.uploadUrl = fixUrl(this.session.uploadUrl)
           }
           if (this.session.eventSourceUrl) {
-            this.session.eventSourceUrl = this.session.eventSourceUrl
-              .replace('http://', 'https://')
-              .replace(':8080', '')
+            this.session.eventSourceUrl = fixUrl(this.session.eventSourceUrl)
           }
         } else {
           console.log(
-            '[Auth] NOT fixing URLs - protocol:',
+            '[Auth] Not fixing URLs - protocol:',
             window.location.protocol,
-            'apiUrl starts with:',
-            this.session?.apiUrl?.substring(0, 8)
+            'apiUrl:',
+            this.session?.apiUrl?.substring(0, 30)
           )
         }
 
@@ -108,19 +116,17 @@ export class JMAPClient {
   }
 
   async restoreSession(serverUrl: string, token: string) {
-    // Restore session using stored token
-    const authUrl = import.meta.env.PROD && serverUrl.includes('mail.rotko.net') 
-      ? '/.well-known/jmap' 
-      : serverUrl
-    
+    const authUrl =
+      import.meta.env.PROD && serverUrl.includes('mail.rotko.net') ? '/.well-known/jmap' : serverUrl
+
     console.log('[Auth] Restoring session with stored token')
 
     try {
       const response = await fetch(authUrl, {
         method: 'GET',
         headers: {
-          'Authorization': token,
-          'Accept': 'application/json',
+          Authorization: token,
+          Accept: 'application/json',
         },
         credentials: 'include',
       })
@@ -132,6 +138,39 @@ export class JMAPClient {
 
       const responseText = await response.text()
       this.session = JSON.parse(responseText)
+
+      if (window.location.protocol === 'https:' && this.session?.apiUrl?.startsWith('http://')) {
+        console.log('[Auth] Fixing restored session URLs')
+
+        const fixUrl = (url: string): string => {
+          if (!url) return url
+          try {
+            const urlObj = new URL(url)
+            if (urlObj.protocol === 'http:' && urlObj.hostname === 'mail.rotko.net') {
+              urlObj.protocol = 'https:'
+              urlObj.port = ''
+              return urlObj.toString()
+            }
+          } catch (e) {
+            return url.replace(/^http:/, 'https:').replace(/:\d+\//, '/')
+          }
+          return url
+        }
+
+        if (this.session.apiUrl) {
+          this.session.apiUrl = fixUrl(this.session.apiUrl)
+        }
+        if (this.session.downloadUrl) {
+          this.session.downloadUrl = fixUrl(this.session.downloadUrl)
+        }
+        if (this.session.uploadUrl) {
+          this.session.uploadUrl = fixUrl(this.session.uploadUrl)
+        }
+        if (this.session.eventSourceUrl) {
+          this.session.eventSourceUrl = fixUrl(this.session.eventSourceUrl)
+        }
+      }
+
       this.accessToken = token
       this.baseUrl = window.location.origin
 
@@ -156,7 +195,7 @@ export class JMAPClient {
         const urlObj = new URL(url, this.baseUrl || window.location.origin)
         console.log('[JMAP] Original URL:', url)
         console.log('[JMAP] Parsed URL:', urlObj.href)
-        
+
         // Check if this is a mail.rotko.net URL
         if (urlObj.hostname === 'mail.rotko.net' || urlObj.hostname === 'localhost') {
           // Return just the pathname (e.g., /jmap/)
@@ -258,12 +297,12 @@ export class JMAPClient {
     if (import.meta.env.DEV) {
       try {
         const urlObj = new URL(eventSourceUrl, this.baseUrl || window.location.origin)
-        
+
         // For EventSource in dev, we need to pass auth as a query parameter
         // because EventSource doesn't support custom headers
         const authToken = this.accessToken.replace('Basic ', '')
         urlObj.searchParams.set('authorization', authToken)
-        
+
         // Use the proxied path with query parameters
         eventSourceUrl = urlObj.pathname + urlObj.search
         console.log('[EventSource] Using proxied EventSource URL:', eventSourceUrl)
