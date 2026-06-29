@@ -13,11 +13,14 @@ interface MailState {
   selectedEmailId: string | null
   emailsByMailbox: Record<string, string[]>
   unreadCounts: Record<string, number>
+  // Merged "All inboxes" view across every account (desktop multi-account).
+  unifiedView: boolean
 
   setMailboxes: (mailboxes: Mailbox[]) => void
   setEmails: (emails: Email[]) => void
   addEmails: (emails: Email[]) => void
   selectMailbox: (mailboxId: string | null) => void
+  showUnifiedInbox: () => void
   selectEmail: (emailId: string | null) => void
   updateEmail: (emailId: string, updates: Partial<Email>) => void
   deleteEmail: (emailId: string) => void
@@ -35,6 +38,7 @@ export const useMailStore = create<MailState>()(
       selectedEmailId: null,
       emailsByMailbox: {},
       unreadCounts: {},
+      unifiedView: false,
 
       setMailboxes: (mailboxes) =>
         set((state) => {
@@ -96,12 +100,23 @@ export const useMailStore = create<MailState>()(
 
       selectMailbox: (mailboxId) =>
         set((state) => {
+          // Choosing a real mailbox leaves the unified view.
+          if (mailboxId !== null) state.unifiedView = false
           if (state.selectedMailboxId !== mailboxId) {
             state.selectedMailboxId = mailboxId
             state.emails = {}
             state.selectedEmailId = null
             state.emailsByMailbox = {}
           }
+        }),
+
+      showUnifiedInbox: () =>
+        set((state) => {
+          state.unifiedView = true
+          state.selectedMailboxId = null
+          state.selectedEmailId = null
+          state.emails = {}
+          state.emailsByMailbox = {}
         }),
 
       selectEmail: (emailId) =>

@@ -1,26 +1,89 @@
 // src/components/Layout/Sidebar.tsx
 import React from 'react'
-import { useMailboxes } from '../../hooks'
+import { useMailboxes, usePrimaryAccountId } from '../../hooks'
 import { useMailStore } from '../../stores/mailStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useUnreadStore } from '../../stores/unreadStore'
 import { useUIStore } from '../../stores/uiStore'
+import { jmapClient } from '../../api/jmap'
+import { toast } from '../../stores/toastStore'
 import { Mailbox } from '../../api/types'
 
 export function Sidebar() {
-  const { data: mailboxes, isLoading, error } = useMailboxes()
+  const { data: mailboxes, isLoading, error, refetch } = useMailboxes()
+  const accountId = usePrimaryAccountId()
   const selectedMailboxId = useMailStore((state) => state.selectedMailboxId)
   const selectMailbox = useMailStore((state) => state.selectMailbox)
+  const unifiedView = useMailStore((state) => state.unifiedView)
+  const showUnifiedInbox = useMailStore((state) => state.showUnifiedInbox)
+  const accounts = useAuthStore((state) => state.accounts)
+  const unreadByAccount = useUnreadStore((state) => state.byAccount)
+  const totalUnread = Object.values(unreadByAccount).reduce((a, b) => a + b, 0)
   const logout = useAuthStore((state) => state.logout)
   const sidebarOpen = useUIStore((state) => state.sidebarOpen)
-  
-  // Debug logging
-  React.useEffect(() => {
-    console.log('[Sidebar] Mailboxes data:', mailboxes)
-    console.log('[Sidebar] Loading:', isLoading)
-    console.log('[Sidebar] Error:', error)
-    console.log('[Sidebar] Selected mailbox:', selectedMailboxId)
-  }, [mailboxes, isLoading, error, selectedMailboxId])
-  
+  const [creatingFolder, setCreatingFolder] = React.useState(false)
+
+  const handleNewFolder = async () => {
+    if (!accountId || creatingFolder) return
+    const name = prompt('New folder name:')?.trim()
+    if (!name) return
+    setCreatingFolder(true)
+    try {
+      await jmapClient.createMailbox(accountId, name)
+      await refetch()
+      toast.success(`Folder “${name}” created`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to create folder')
+    } finally {
+      setCreatingFolder(false)
+    }
+  }
+
+  // Per-folder actions menu
+  const [menuFor, setMenuFor] = React.useState<string | null>(null)
+  // Refresh both the folder list/counts and the message list everywhere.
+  const refreshAll = () => window.dispatchEvent(new CustomEvent('mailbox-changed'))
+
+  const handleMarkRead = async (mailbox: Mailbox) => {
+    setMenuFor(null)
+    if (!accountId) return
+    try {
+      const n = await jmapClient.markMailboxRead(accountId, mailbox.id)
+      refreshAll()
+      toast.success(n > 0 ? `Marked ${n} message${n > 1 ? 's' : ''} as read` : 'No unread messages')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to mark read')
+    }
+  }
+
+  const handleRename = async (mailbox: Mailbox) => {
+    setMenuFor(null)
+    if (!accountId) return
+    const name = prompt('Rename folder:', mailbox.name)?.trim()
+    if (!name || name === mailbox.name) return
+    try {
+      await jmapClient.updateMailbox(accountId, mailbox.id, { name })
+      refreshAll()
+      toast.success('Folder renamed')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Rename failed')
+    }
+  }
+
+  const handleDeleteFolder = async (mailbox: Mailbox) => {
+    setMenuFor(null)
+    if (!accountId) return
+    if (!confirm(`Delete folder “${mailbox.name}”? This can't be undone.`)) return
+    try {
+      await jmapClient.destroyMailbox(accountId, mailbox.id)
+      if (selectedMailboxId === mailbox.id) selectMailbox(null)
+      refreshAll()
+      toast.success('Folder deleted')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Delete failed')
+    }
+  }
+
   // Check if mobile
   const [isMobile, setIsMobile] = React.useState(false)
   React.useEffect(() => {
@@ -35,10 +98,8 @@ export function Sidebar() {
     if (!selectedMailboxId && mailboxes && mailboxes.length > 0) {
       const inbox = mailboxes.find((m) => m.role === 'inbox')
       if (inbox) {
-        console.log('[Sidebar] Auto-selecting inbox:', inbox.id)
         selectMailbox(inbox.id)
       } else {
-        console.log('[Sidebar] No inbox found, selecting first mailbox')
         selectMailbox(mailboxes[0].id)
       }
     }
@@ -47,9 +108,7 @@ export function Sidebar() {
   // Sort mailboxes with custom order
   const sortedMailboxes = React.useMemo(() => {
     if (!mailboxes) return []
-    
-    console.log('[Sidebar] Sorting mailboxes:', mailboxes.length)
-    
+
     // Define the order for special mailboxes
     const roleOrder: Record<string, number> = {
       'inbox': 1,
@@ -134,8 +193,18 @@ export function Sidebar() {
   
   if (error) {
     return (
-      <div className="w-full bg-[var(--bg-secondary)] border-r border-[var(--border-color)] p-4">
-        <div className="text-red-500">Error loading mailboxes</div>
+      <div className="w-full h-full bg-[var(--bg-secondary)] border-r border-[var(--border-color)] p-4 flex flex-col items-center justify-center text-center gap-3">
+        <div className="i-lucide:wifi-off text-3xl text-[var(--text-tertiary)]" />
+        <div className="text-sm text-[var(--text-secondary)]">Couldn't load mailboxes</div>
+        <div className="text-xs text-[var(--text-tertiary)] break-words max-w-full">
+          {error instanceof Error ? error.message : 'Check your connection and try again.'}
+        </div>
+        <button
+          onClick={() => refetch()}
+          className="mt-1 px-3 py-1.5 text-sm bg-[var(--primary-color)] text-[var(--on-primary)] rounded-lg hover:bg-[var(--primary-hover)] transition-colors"
+        >
+          Retry
+        </button>
       </div>
     )
   }
@@ -148,8 +217,6 @@ export function Sidebar() {
     )
   }
   
-  console.log('[Sidebar] Rendering with', sortedMailboxes.length, 'sorted mailboxes')
-  
   return (
     <div className={`
       w-full h-full
@@ -158,6 +225,28 @@ export function Sidebar() {
     `}>
       {/* Mailboxes */}
       <div className="flex-1 overflow-y-auto py-2">
+        {/* Unified inbox across all accounts (multi-account desktop) */}
+        {accounts.length > 1 && (
+          <>
+            <button
+              onClick={showUnifiedInbox}
+              className={`w-full px-4 py-2.5 flex items-center gap-3 text-left text-[var(--text-primary)] transition-all hover:bg-white/10 ${
+                unifiedView ? 'bg-[var(--primary-color)]/20 border-r-4 border-[var(--primary-color)]' : ''
+              }`}
+            >
+              <div className="i-lucide:layers text-lg flex-shrink-0" />
+              <span className="flex-1 min-w-0 truncate font-medium">All inboxes</span>
+              {totalUnread > 0 ? (
+                <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--primary-color)] text-[var(--on-primary)] font-medium">
+                  {totalUnread > 999 ? '999+' : totalUnread}
+                </span>
+              ) : (
+                <span className="text-xs text-[var(--text-tertiary)]">{accounts.length}</span>
+              )}
+            </button>
+            <div className="my-2 mx-4 border-t border-[var(--border-color)]" />
+          </>
+        )}
         {sortedMailboxes.map((mailbox) => {
           const isSelected = mailbox.id === selectedMailboxId
           const isSpecial = mailbox.role && ['inbox', 'drafts', 'junk', 'spam', 'trash', 'sent'].includes(mailbox.role)
@@ -170,29 +259,66 @@ export function Sidebar() {
                 <div className="my-2 mx-4 border-t border-[var(--border-color)]" />
               )}
               
-              <button
-                onClick={() => selectMailbox(mailbox.id)}
-                className={`
-                  w-full px-4 py-2.5 flex items-center gap-3 text-left transition-all
-                  hover:bg-white/10
-                  ${isSelected ? 'bg-[var(--primary-color)]/20 text-[var(--text-primary)] border-r-4 border-[var(--primary-color)]' : 'text-[var(--text-primary)]'}
-                `}
+              <div
+                className={`group relative w-full flex items-center transition-all hover:bg-white/10 ${
+                  isSelected
+                    ? 'bg-[var(--primary-color)]/20 border-r-4 border-[var(--primary-color)]'
+                    : ''
+                }`}
               >
-                <div
-                  className={`${getMailboxIcon(mailbox.role)} ${isSelected ? '' : getMailboxColor(mailbox.role)}`}
-                />
-                <span className="flex-1 font-medium">{mailbox.name}</span>
-                {mailbox.unreadEmails > 0 && (
-                  <span
-                    className={`
-                    px-2 py-0.5 rounded-full text-xs font-medium
-                    ${isSelected ? 'bg-[var(--primary-color)] text-white' : 'bg-[var(--accent-cyan)] text-white'}
-                  `}
-                  >
-                    {mailbox.unreadEmails > 999 ? '999+' : mailbox.unreadEmails}
-                  </span>
+                <button
+                  onClick={() => selectMailbox(mailbox.id)}
+                  className="flex-1 min-w-0 px-4 py-2.5 flex items-center gap-3 text-left text-[var(--text-primary)]"
+                >
+                  <div
+                    className={`flex-shrink-0 ${getMailboxIcon(mailbox.role)} ${isSelected ? '' : getMailboxColor(mailbox.role)}`}
+                  />
+                  <span className="flex-1 min-w-0 truncate font-medium">{mailbox.name}</span>
+                  {mailbox.unreadEmails > 0 && (
+                    <span
+                      className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${isSelected ? 'bg-[var(--primary-color)] text-[var(--on-primary)]' : 'bg-[var(--accent-cyan)] text-[var(--on-accent)]'}`}
+                    >
+                      {mailbox.unreadEmails > 999 ? '999+' : mailbox.unreadEmails}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setMenuFor(menuFor === mailbox.id ? null : mailbox.id)}
+                  className="flex-shrink-0 px-2 self-stretch opacity-0 group-hover:opacity-100 focus:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                  title="Folder actions"
+                >
+                  <div className="i-lucide:more-vertical text-sm" />
+                </button>
+                {menuFor === mailbox.id && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setMenuFor(null)} />
+                    <div className="absolute right-2 top-full z-50 mt-1 w-44 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl py-1">
+                      <button
+                        onClick={() => handleMarkRead(mailbox)}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-white/10 flex items-center gap-2"
+                      >
+                        <div className="i-lucide:check-check text-[var(--text-tertiary)]" /> Mark all read
+                      </button>
+                      {!isSpecial && (
+                        <>
+                          <button
+                            onClick={() => handleRename(mailbox)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-white/10 flex items-center gap-2"
+                          >
+                            <div className="i-lucide:pencil text-[var(--text-tertiary)]" /> Rename
+                          </button>
+                          <button
+                            onClick={() => handleDeleteFolder(mailbox)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-red-400/10 text-red-400 flex items-center gap-2"
+                          >
+                            <div className="i-lucide:trash-2" /> Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </>
                 )}
-              </button>
+              </div>
             </React.Fragment>
           )
         })}
@@ -200,19 +326,14 @@ export function Sidebar() {
       
       {/* Bottom section */}
       <div className="border-t border-[var(--border-color)] p-4">
-        <button 
-          className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-primary)] hover:text-[var(--accent-cyan)] hover:bg-white/10 rounded transition-all"
-          title="Manage labels (coming soon)"
+        <button
+          onClick={handleNewFolder}
+          disabled={creatingFolder}
+          className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-primary)] hover:text-[var(--accent-cyan)] hover:bg-white/10 rounded transition-all disabled:opacity-50"
+          title="Create a new folder"
         >
-          <div className="i-lucide:tag" />
-          <span className="text-sm">Labels</span>
-        </button>
-        <button 
-          className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-primary)] hover:text-[var(--accent-cyan)] hover:bg-white/10 rounded transition-all"
-          title="Create folder (coming soon)"
-        >
-          <div className="i-lucide:folder-plus" />
-          <span className="text-sm">Folders</span>
+          <div className={creatingFolder ? 'i-eos-icons:loading animate-spin' : 'i-lucide:folder-plus'} />
+          <span className="text-sm">New folder</span>
         </button>
         <button
           onClick={logout}

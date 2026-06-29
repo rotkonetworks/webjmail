@@ -33,7 +33,7 @@ export function MobileBottomNav() {
           <div className={`text-lg ${getMailboxIcon(mailbox.role)}`} />
           <span className="text-xs">{mailbox.name}</span>
           {mailbox.unreadEmails > 0 && (
-            <span className="absolute top-1 right-1/4 bg-[var(--primary-color)] text-white text-[10px] rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+            <span className="absolute top-1 right-1/4 bg-[var(--primary-color)] text-[var(--on-primary)] text-[10px] rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
               {mailbox.unreadEmails > 99 ? '99+' : mailbox.unreadEmails}
             </span>
           )}
