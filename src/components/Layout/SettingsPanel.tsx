@@ -1,6 +1,8 @@
 // src/components/Layout/SettingsPanel.tsx
 import { useUIStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useAiProviderStore, OPENAI_PRESETS } from '../../stores/aiProviderStore'
+import { isTauri } from '../../lib/tauri'
 
 interface SettingsPanelProps {
   isOpen: boolean
@@ -19,6 +21,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const htmlRichness = useUIStore((state) => state.htmlRichness)
   const setHtmlRichness = useUIStore((state) => state.setHtmlRichness)
   const session = useAuthStore((state) => state.session)
+
+  const ai = useAiProviderStore()
   
   // In row mode, settings panel takes full width
   const isRowMode = viewMode === 'row'
@@ -334,6 +338,99 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </div>
             </div>
             
+            {/* AI Assistant */}
+            <div>
+              <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">Assistant</h3>
+              <div className="space-y-2">
+                {isTauri && (
+                  <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
+                    <input
+                      type="radio"
+                      name="aiProvider"
+                      value="claude-subscription"
+                      checked={ai.provider === 'claude-subscription'}
+                      onChange={() => ai.setProvider('claude-subscription')}
+                    />
+                    <div>
+                      <div className="font-medium">Claude subscription</div>
+                      <div className="text-sm text-[var(--text-tertiary)]">
+                        Uses your Claude Code login — no API key (desktop only)
+                      </div>
+                    </div>
+                  </label>
+                )}
+                <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
+                  <input
+                    type="radio"
+                    name="aiProvider"
+                    value="openai"
+                    checked={ai.provider === 'openai'}
+                    onChange={() => ai.setProvider('openai')}
+                  />
+                  <div>
+                    <div className="font-medium">OpenAI-compatible</div>
+                    <div className="text-sm text-[var(--text-tertiary)]">
+                      OpenAI, Ollama, OpenRouter, LM Studio, vLLM…
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              {ai.provider === 'openai' && (
+                <div className="mt-3 space-y-3 p-3 rounded-lg bg-[var(--bg-tertiary)]">
+                  <div className="flex flex-wrap gap-2">
+                    {OPENAI_PRESETS.map((p) => (
+                      <button
+                        key={p.name}
+                        onClick={() => ai.applyPreset({ baseUrl: p.baseUrl, model: p.model })}
+                        className="px-2 py-1 text-xs rounded border border-[var(--border-color)] hover:bg-[var(--bg-secondary)] transition-colors"
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[var(--text-tertiary)] mb-1">Base URL</label>
+                    <input
+                      type="text"
+                      value={ai.baseUrl}
+                      onChange={(e) => ai.setBaseUrl(e.target.value)}
+                      placeholder="http://localhost:11434/v1"
+                      className="w-full text-sm bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded px-2 py-1.5 outline-none focus:border-[var(--primary-color)]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[var(--text-tertiary)] mb-1">Model</label>
+                    <input
+                      type="text"
+                      value={ai.model}
+                      onChange={(e) => ai.setModel(e.target.value)}
+                      placeholder="gpt-4o / llama3.1 / …"
+                      className="w-full text-sm bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded px-2 py-1.5 outline-none focus:border-[var(--primary-color)]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[var(--text-tertiary)] mb-1">
+                      API key <span className="opacity-60">(blank for local/Ollama)</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={ai.apiKey}
+                      onChange={(e) => ai.setApiKey(e.target.value)}
+                      placeholder="sk-…"
+                      autoComplete="off"
+                      className="w-full text-sm bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded px-2 py-1.5 outline-none focus:border-[var(--primary-color)]"
+                    />
+                  </div>
+                  <p className="text-xs text-[var(--text-tertiary)] leading-relaxed">
+                    Calls go directly from this app to the URL above; the key is stored in this
+                    browser. For Ollama, start it with{' '}
+                    <code>OLLAMA_ORIGINS=*</code> so the browser may connect.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Account info */}
             <div>
               <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">Account</h3>

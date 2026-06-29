@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './stores/authStore'
 import { Login } from './pages/Login'
 import { Layout } from './components/Layout/Layout'
+import { Toaster } from './components/Layout/Toaster'
+import { Onboarding, hasOnboarded, markOnboarded } from './components/Onboarding/Onboarding'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,12 +20,22 @@ function AppContent() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const isLoading = useAuthStore((state) => state.isLoading)
   const [isInitializing, setIsInitializing] = useState(true)
+  const [onboarded, setOnboarded] = useState(hasOnboarded)
 
   useEffect(() => {
     useAuthStore.getState().restoreSession().finally(() => {
       setIsInitializing(false)
     })
   }, [])
+
+  // An existing user (restored session / manifest auto-login) has implicitly
+  // onboarded — don't show the wizard to them.
+  useEffect(() => {
+    if (isAuthenticated && !onboarded) {
+      markOnboarded()
+      setOnboarded(true)
+    }
+  }, [isAuthenticated, onboarded])
 
   // Show loading screen while checking authentication
   if (isInitializing || isLoading) {
@@ -40,6 +52,10 @@ function AppContent() {
     )
   }
 
+  if (!isAuthenticated && !onboarded) {
+    return <Onboarding onDone={() => setOnboarded(true)} />
+  }
+
   if (!isAuthenticated) {
     return <Login />
   }
@@ -51,6 +67,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AppContent />
+      <Toaster />
     </QueryClientProvider>
   )
 }

@@ -16,14 +16,21 @@
 
 /* Monokai Dark Theme (default) */
 [data-theme='dark'] {
+  /* Render native controls (select option popups, scrollbars, date pickers)
+     in dark — CSS custom properties don't reach the OS-drawn popup. */
+  color-scheme: dark;
   /* Monokai colors */
   --bg-primary: #272822;
   --bg-secondary: #1e1f1c;
-  --bg-tertiary: #383a3e;
+  --bg-tertiary: #32332c;
+  --bg-elevated: #3a3b33;
   --text-primary: #f8f8f2;
   --text-secondary: #d3d3d3;
   --text-tertiary: #a6a6a0;
   --border-color: #414339;
+  /* Readable text to place ON the bright accent/primary fills. */
+  --on-primary: #1c1d18;
+  --on-accent: #1c1d18;
 
   /* Monokai accent colors - using provided palette */
   --accent-pink: #ff6188;
@@ -43,14 +50,18 @@
 
 /* Polkadot Light Theme */
 [data-theme='light'] {
+  color-scheme: light;
   /* Polkadot brand colors */
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f5;
   --bg-tertiary: #e8e8e8;
+  --bg-elevated: #eeeeee;
   --text-primary: #000000;
   --text-secondary: #5e5e5e;
   --text-tertiary: #999999;
   --border-color: #dce2e9;
+  --on-primary: #ffffff;
+  --on-accent: #14202b;
 
   /* Monokai accent colors - adapted for light theme */
   --accent-pink: #d1477a;
@@ -71,14 +82,18 @@
 /* Auto theme detection */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
+    color-scheme: light;
     /* Copy light theme values */
     --bg-primary: #ffffff;
     --bg-secondary: #f5f5f5;
     --bg-tertiary: #e8e8e8;
+    --bg-elevated: #eeeeee;
     --text-primary: #000000;
     --text-secondary: #5e5e5e;
     --text-tertiary: #999999;
     --border-color: #dce2e9;
+    --on-primary: #ffffff;
+    --on-accent: #14202b;
     --accent-pink: #d1477a;
     --accent-orange: #e6825a;
     --accent-yellow: #d4c441;
@@ -95,14 +110,18 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
+    color-scheme: dark;
     /* Copy dark theme values */
     --bg-primary: #272822;
     --bg-secondary: #1e1f1c;
-    --bg-tertiary: #383a3e;
+    --bg-tertiary: #32332c;
+    --bg-elevated: #3a3b33;
     --text-primary: #f8f8f2;
     --text-secondary: #d3d3d3;
     --text-tertiary: #a6a6a0;
     --border-color: #414339;
+    --on-primary: #1c1d18;
+    --on-accent: #1c1d18;
     --accent-pink: #ff6188;
     --accent-orange: #fc9867;
     --accent-yellow: #ffd866;
@@ -198,7 +217,7 @@ body {
 /* Button styles */
 .btn-primary {
   background: var(--primary-color);
-  color: white;
+  color: var(--on-primary);
   font-weight: 500;
   transition: all 0.2s ease;
 }
@@ -315,7 +334,7 @@ body {
 /* Compose button */
 .compose-btn {
   background: var(--compose-btn);
-  color: white;
+  color: var(--on-primary);
   font-weight: 600;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   transition: all 0.2s ease;
@@ -329,7 +348,7 @@ body {
 /* Settings button */
 .settings-btn {
   background: var(--compose-btn);
-  color: white;
+  color: var(--on-primary);
 }
 
 /* Focus styles */
@@ -340,6 +359,15 @@ body {
 :focus-visible {
   outline: 2px solid var(--primary-color);
   outline-offset: 2px;
+}
+
+/* The closed <select> control follows the theme; the option popup itself is
+   drawn natively and is themed via `color-scheme` on the root (set per theme
+   above) — forcing option background-color here causes white-on-white because
+   the native popup's text color can't be paired with it. */
+select {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 /* Email thread timeline */
@@ -527,8 +555,10 @@ input[type='radio']:checked::after {
 
 /* Mobile-specific adjustments */
 @media (max-width: 768px) {
-  /* Hide desktop-only elements */
-  .timeline-scrollbar,
+  /* Hide desktop-only decorations. NOTE: .timeline-scrollbar is the actual
+     email body scroll CONTAINER (custom-scrollbar styling), NOT a decoration —
+     hiding it here removed the whole email body on mobile. Only the timeline
+     line/markers and the desktop search input should hide. */
   .timeline-marker::before,
   .email-timeline::before,
   .search-input {

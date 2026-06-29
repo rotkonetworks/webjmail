@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, memo, useCallback } from 'react'
-import { useAuthStore } from '../../stores/authStore'
+import { AccountSwitcher } from './AccountSwitcher'
+import { useSyncStatusStore } from '../../stores/syncStatusStore'
 import { useManualRefresh } from '../../hooks'
 import { useSearchStore } from '../../stores/searchStore'
 import { useDeviceType } from '../../hooks/useDeviceType'
@@ -8,11 +9,12 @@ import { config } from '../../config'
 interface HeaderProps {
   onCompose: () => void
   onSettings: () => void
+  onAgent?: () => void
 }
 
-export const Header = memo(function Header({ onCompose, onSettings }: HeaderProps) {
-  const session = useAuthStore((state) => state.session)
+export const Header = memo(function Header({ onCompose, onSettings, onAgent }: HeaderProps) {
   const searchRef = useRef<HTMLInputElement>(null)
+  const indexing = useSyncStatusStore((s) => s.indexing)
   const manualRefresh = useManualRefresh()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const isMobile = useDeviceType()
@@ -59,9 +61,6 @@ export const Header = memo(function Header({ onCompose, onSettings }: HeaderProp
     setSearchQuery('')
   }, [setSearchQuery])
 
-  const username = session?.username || 'User'
-  const firstLetter = username.charAt(0).toUpperCase()
-
   if (isMobile) {
     // Simplified mobile header
     return (
@@ -89,8 +88,20 @@ export const Header = memo(function Header({ onCompose, onSettings }: HeaderProp
             onClick={onCompose}
             className="p-2 hover:bg-white/10 rounded-lg bg-[var(--primary-color)]"
           >
-            <div className="i-lucide:edit-3 text-white text-sm" />
+            <div className="i-lucide:edit-3 text-[var(--on-primary)] text-sm" />
           </button>
+
+          {onAgent && (
+            <button
+              onClick={onAgent}
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              title="Assistant — chat with your mail"
+            >
+              <div className="i-lucide:sparkles text-sm" />
+            </button>
+          )}
+
+          <AccountSwitcher compact />
 
           <button onClick={onSettings} className="p-2 hover:bg-white/10 rounded-lg" title="Settings">
             <div className="i-lucide:settings text-sm" />
@@ -136,6 +147,17 @@ export const Header = memo(function Header({ onCompose, onSettings }: HeaderProp
 
       {/* Right side actions */}
       <div className="flex items-center gap-2">
+        {/* Local-index status */}
+        {indexing && (
+          <div
+            className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] px-2"
+            title="Indexing your mail for offline search"
+          >
+            <div className="i-eos-icons:loading animate-spin" />
+            <span className="hidden lg:inline">Indexing…</span>
+          </div>
+        )}
+
         {/* Manual Refresh Button */}
         <button
           onClick={handleManualRefresh}
@@ -155,13 +177,19 @@ export const Header = memo(function Header({ onCompose, onSettings }: HeaderProp
           <span>New message</span>
         </button>
 
-        {/* User Menu */}
-        <div className="flex items-center gap-3 ml-4">
-          <div className="w-8 h-8 bg-[var(--primary-color)] rounded-full flex items-center justify-center text-sm font-medium">
-            {firstLetter}
-          </div>
-          <span className="text-sm text-[var(--text-secondary)]">{username}</span>
-        </div>
+        {/* Assistant (Claude subscription) */}
+        {onAgent && (
+          <button
+            onClick={onAgent}
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            title="Assistant — chat with your mail"
+          >
+            <div className="i-lucide:sparkles" />
+          </button>
+        )}
+
+        {/* Account switcher (multi-account) */}
+        <AccountSwitcher />
 
         {/* Settings */}
         <button onClick={onSettings} className="settings-btn p-2 rounded-lg ml-2" title="Settings">

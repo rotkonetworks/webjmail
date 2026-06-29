@@ -13,6 +13,7 @@ interface UIState {
   sidebarOpen: boolean
   sidebarWidth: number
   messageListWidth: number
+  agentPanelWidth: number
   loading: boolean
   error: string | null
   viewMode: ViewMode
@@ -27,6 +28,7 @@ interface UIState {
   setSidebarOpen: (open: boolean) => void
   setSidebarWidth: (width: number) => void
   setMessageListWidth: (width: number) => void
+  setAgentPanelWidth: (width: number) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   setViewMode: (mode: ViewMode) => void
@@ -45,6 +47,7 @@ export const useUIStore = create<UIState>()(
       sidebarOpen: true,
       sidebarWidth: 240,
       messageListWidth: 320,
+      agentPanelWidth: 400,
       loading: false,
       error: null,
       viewMode: 'column',
@@ -59,6 +62,7 @@ export const useUIStore = create<UIState>()(
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
       setMessageListWidth: (messageListWidth) => set({ messageListWidth }),
+      setAgentPanelWidth: (agentPanelWidth) => set({ agentPanelWidth }),
       setLoading: (loading) => set({ loading }),
       setError: (error) => set({ error }),
       setViewMode: (viewMode) => set({ viewMode }),
@@ -81,6 +85,7 @@ export const useUIStore = create<UIState>()(
         sidebarOpen: state.sidebarOpen,
         sidebarWidth: state.sidebarWidth,
         messageListWidth: state.messageListWidth,
+        agentPanelWidth: state.agentPanelWidth,
         theme: state.theme,
         font: state.font,
         imageLoadingMode: state.imageLoadingMode,
