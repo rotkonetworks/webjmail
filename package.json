@@ -8,11 +8,15 @@
     "build": "vite build --mode production",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.80.6",
     "@tanstack/react-query-devtools": "^5.80.6",
+    "@tauri-apps/api": "^2",
     "date-fns": "^4.1.0",
     "dexie": "^4.0.11",
     "dompurify": "^3.2.6",
@@ -27,6 +31,7 @@
     "@eslint/js": "^9.36.0",
     "@iconify-json/eos-icons": "^1.2.2",
     "@iconify-json/lucide": "^1.2.47",
+    "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.6",
     "@types/react-window": "^1.8.8",

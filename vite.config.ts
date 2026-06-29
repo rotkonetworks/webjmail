@@ -14,9 +14,17 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Don't let Vite wipe the Tauri CLI's output, and fail loudly if port 3000
+  // is taken so `tauri dev` (which expects http://localhost:3000) doesn't hang.
+  clearScreen: false,
   server: {
     port: 3000,
+    strictPort: true,
     host: true,
+    // Avoid reload loops watching the Rust source tree.
+    watch: {
+      ignored: ['**/src-tauri/**'],
+    },
     proxy: {
       // Proxy for JMAP discovery
       '/.well-known/jmap': {
