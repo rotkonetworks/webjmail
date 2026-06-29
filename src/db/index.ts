@@ -6,6 +6,9 @@ export interface CachedEmail extends Email {
   _syncedAt: number
   _mailboxIds: string[]
   _userId: string
+  // Lowercased, HTML-stripped haystack (subject + addresses + body) used for
+  // offline full-text search. Not a Dexie index — matched via substring filter.
+  _searchText?: string
 }
 
 interface SyncState {
@@ -49,6 +52,16 @@ class MailDB extends Dexie {
       syncStates: 'id, [userId+lastSync], userId',
       attachments: 'blobId, [userId+blobId], userId',
       sessions: 'id, userId, lastActivity',
+    })
+
+    // v2: `_mailboxIds` is an ARRAY, so a compound index over it
+    // (`[_userId+_mailboxIds+…]`) can never match a scalar mailbox id — IndexedDB
+    // doesn't expand arrays inside compound keys. Use a proper multiEntry index
+    // (`*_mailboxIds`) so "emails in this mailbox" actually returns rows. Dexie
+    // re-indexes existing records on upgrade; no data loss.
+    this.version(2).stores({
+      emails:
+        'id, [_userId+threadId], *_mailboxIds, [_userId+receivedAt], _userId, _syncedAt',
     })
   }
 

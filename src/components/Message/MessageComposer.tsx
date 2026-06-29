@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useSendEmail } from '../../hooks'
+import { useIdentities } from '../../hooks/useIdentities'
 import { config } from '../../config'
+import type { Identity } from '../../api/types'
 
 interface MessageComposerProps {
   onClose: () => void
@@ -18,6 +20,9 @@ interface MessageComposerProps {
 export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageComposerProps) {
   const session = useAuthStore((state) => state.session)
   const sendEmail = useSendEmail()
+  const { data: identities, isLoading: loadingIdentities } = useIdentities()
+
+  const [selectedIdentity, setSelectedIdentity] = useState<Identity | null>(null)
 
   const [to, setTo] = useState(
     mode === 'reply' && replyTo
@@ -42,6 +47,13 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
   )
   const [body, setBody] = useState('')
   const [isSending, setIsSending] = useState(false)
+
+  // Set default identity when identities are loaded
+  useEffect(() => {
+    if (identities && identities.length > 0 && !selectedIdentity) {
+      setSelectedIdentity(identities[0])
+    }
+  }, [identities, selectedIdentity])
 
   const handleSend = async () => {
     // Bug 14: Add SendEmail validation
@@ -96,6 +108,7 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
         subject: subject.trim(),
         textBody: body,
         inReplyTo: mode === 'reply' || mode === 'replyAll' ? replyTo?.emailId : undefined,
+        fromIdentity: selectedIdentity,
       })
       
       onClose()
@@ -135,6 +148,39 @@ export function MessageComposer({ onClose, replyTo, mode = 'compose' }: MessageC
 
         {/* Form */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">From</label>
+            {loadingIdentities ? (
+              <div className="search-input w-full flex items-center">
+                <div className="i-eos-icons:loading animate-spin mr-2" />
+                Loading identities...
+              </div>
+            ) : identities && identities.length > 1 ? (
+              <select
+                value={selectedIdentity?.id || ''}
+                onChange={(e) => {
+                  const identity = identities.find(id => id.id === e.target.value)
+                  setSelectedIdentity(identity || null)
+                }}
+                className="search-input w-full"
+                disabled={isSending}
+              >
+                {identities.map((identity) => (
+                  <option key={identity.id} value={identity.id}>
+                    {identity.name ? `${identity.name} <${identity.email}>` : identity.email}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="search-input w-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">
+                {selectedIdentity
+                  ? (selectedIdentity.name ? `${selectedIdentity.name} <${selectedIdentity.email}>` : selectedIdentity.email)
+                  : session?.username || 'Loading...'
+                }
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">To</label>
             <input

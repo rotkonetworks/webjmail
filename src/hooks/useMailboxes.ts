@@ -1,31 +1,57 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { jmapClient } from '../api/jmap'
 import { useAuthStore } from '../stores/authStore'
 import { useMailStore } from '../stores/mailStore'
 import { usePrimaryAccountId } from './usePrimaryAccountId'
+import { useCurrentUserId } from './useIndexedDB'
+import { syncManager } from '../db/sync'
 
+/**
+ * Local-first folder list. Renders the cached mailboxes from IndexedDB instantly
+ * on launch, then refreshes from the server in the background and only re-renders
+ * if anything actually changed.
+ */
 export function useMailboxes() {
   const session = useAuthStore((state) => state.session)
   const accountId = usePrimaryAccountId()
+  const userId = useCurrentUserId()
   const setMailboxes = useMailStore((state) => state.setMailboxes)
+  const queryClient = useQueryClient()
 
   return useQuery({
     queryKey: ['mailboxes', accountId],
     queryFn: async () => {
       if (!accountId) throw new Error('No account ID')
-      
-      if (import.meta.env.DEV) {
-        console.log('[useMailboxes] Fetching mailboxes for account:', accountId)
+      if (!userId) {
+        // No user context yet — fetch without persisting to avoid a bad cache key.
+        const fresh = await jmapClient.getMailboxes(accountId)
+        setMailboxes(fresh)
+        return fresh
       }
-      
-      const mailboxes = await jmapClient.getMailboxes(accountId)
-      setMailboxes(mailboxes)
-      
-      if (import.meta.env.DEV) {
-        console.log('[useMailboxes] Fetched mailboxes:', mailboxes.length)
+
+      await syncManager.ensureUser(userId)
+      const cached = await syncManager.getCachedMailboxes(userId)
+
+      if (cached.length > 0) {
+        setMailboxes(cached)
+        // Background refresh; only invalidate (re-render) if the server differs.
+        syncManager
+          .fetchAndCacheMailboxes(accountId, userId)
+          .then((fresh) => {
+            if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
+              queryClient.invalidateQueries({ queryKey: ['mailboxes', accountId] })
+            }
+          })
+          .catch((e) => {
+            if (import.meta.env.DEV) console.error('[useMailboxes] refresh failed:', e)
+          })
+        return cached
       }
-      
-      return mailboxes
+
+      // Cold cache → fetch from the server and persist.
+      const fresh = await syncManager.fetchAndCacheMailboxes(accountId, userId)
+      setMailboxes(fresh)
+      return fresh
     },
     enabled: !!session && !!accountId,
     staleTime: 5 * 60 * 1000, // 5 minutes

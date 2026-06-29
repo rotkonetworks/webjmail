@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import React from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useMailStore } from '../../stores/mailStore'
 import { useUIStore } from '../../stores/uiStore'
 import {
@@ -13,6 +14,51 @@ import { useDeviceType } from '../../hooks/useDeviceType'
 import DOMPurify from 'dompurify'
 import { format } from 'date-fns'
 import { jmapClient } from '../../api/jmap'
+import { isTauri } from '../../lib/tauri'
+import { toast, useToastStore } from '../../stores/toastStore'
+
+// Force every link in rendered email HTML to open in a new tab/window instead
+// of navigating the app frame away (which would destroy the SPA in the browser
+// and hijack the whole window in the Tauri webview). Registered once.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.tagName === 'A') {
+    node.setAttribute('target', '_blank')
+    node.setAttribute('rel', 'noopener noreferrer')
+  }
+})
+
+// Render a plain-text email body respectfully: HTML-escape everything, then
+// linkify URLs and bare email addresses into anchors (which the DOMPurify hook
+// + .email-content click handler turn into externally-opening links). A single
+// pass avoids nested anchors and double-escaping. Whitespace/line breaks are
+// preserved via CSS on the container.
+function plainTextToHtml(text: string): string {
+  const escape = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+
+  const pattern =
+    /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])|([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g
+  let out = ''
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = pattern.exec(text)) !== null) {
+    out += escape(text.slice(last, m.index))
+    if (m[1]) {
+      const url = escape(m[1])
+      out += `<a href="${url}">${url}</a>`
+    } else {
+      const email = escape(m[2])
+      out += `<a href="mailto:${email}">${email}</a>`
+    }
+    last = pattern.lastIndex
+  }
+  out += escape(text.slice(last))
+  return out
+}
 
 interface MessageViewProps {
   onClose?: () => void
@@ -25,6 +71,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
   const email = selectedEmailId ? emails[selectedEmailId] : null
   const accountId = usePrimaryAccountId()
   const selectEmail = useMailStore((state) => state.selectEmail)
+  const addEmails = useMailStore((state) => state.addEmails)
   const imageLoadingMode = useUIStore((state) => state.imageLoadingMode)
   const htmlRichness = useUIStore((state) => state.htmlRichness)
   const markAsRead = useMarkAsRead()
@@ -70,6 +117,22 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
   useEffect(() => {
     const handleLoadImage = (e: MouseEvent) => {
       const button = e.target as HTMLElement
+
+      // Open links inside rendered email HTML externally (browser), instead of
+      // letting them navigate the app frame away.
+      const anchor = button.closest?.('a') as HTMLAnchorElement | null
+      if (anchor && anchor.closest('.email-content')) {
+        const href = anchor.getAttribute('href') || ''
+        if (/^(https?:|mailto:)/i.test(href)) {
+          if (isTauri) {
+            e.preventDefault()
+            jmapClient.openExternal(href).catch((err) => console.error('[Link]', err))
+          }
+          // Web: target=_blank already opens a new tab.
+          return
+        }
+      }
+
       if (button.classList.contains('load-single-image')) {
         const wrapper = button.closest('.blocked-image-wrapper') as HTMLElement
         if (wrapper) {
@@ -95,7 +158,58 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
     return () => document.removeEventListener('click', handleLoadImage)
   }, [])
 
-  if (!email || !accountId) return null
+  // The list keeps emails in mailStore, but an email selected from search, the
+  // assistant, or a thread (or after the row-mode list unmounts) may not be in
+  // that store. Fetch it on demand so the view never blanks.
+  const needsFetch = !!selectedEmailId && !email && !!accountId
+  const { data: fetchedEmail, isLoading: isFetchingEmail } = useQuery({
+    queryKey: ['email', accountId, selectedEmailId],
+    queryFn: () => jmapClient.getEmailById(accountId!, selectedEmailId!),
+    enabled: needsFetch,
+  })
+  useEffect(() => {
+    if (fetchedEmail) addEmails([fetchedEmail])
+  }, [fetchedEmail, addEmails])
+
+  if (!accountId) return null
+
+  // Selected but not yet resolved: show a loading / not-found state with a way
+  // back (important on narrow layouts where this view replaces the list).
+  if (!email) {
+    if (!selectedEmailId) return null
+    return (
+      <div className="h-full flex flex-col">
+        {(isMobile || onClose) && (
+          <div className="flex items-center gap-2 p-3 border-b border-[var(--border-color)]">
+            <button
+              onClick={() => (onClose ? onClose() : selectEmail(null))}
+              className="p-2 hover:bg-white/10 rounded-lg flex items-center gap-1 text-sm"
+            >
+              <div className="i-lucide:arrow-left" /> Back
+            </button>
+          </div>
+        )}
+        <div className="flex-1 flex items-center justify-center">
+          {isFetchingEmail ? (
+            <div className="text-[var(--text-tertiary)] flex items-center gap-2 text-sm">
+              <div className="i-eos-icons:loading animate-spin" /> Loading message…
+            </div>
+          ) : (
+            <div className="empty-state">
+              <div className="empty-state-icon i-lucide:mail-x" />
+              <p className="text-sm">Couldn't load this message.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const getPlainText = (e: any): string => {
+    const parts = (e.textBody?.length ? e.textBody : e.htmlBody) || []
+    const raw = parts.map((p: any) => e.bodyValues?.[p.partId]?.value || '').join('\n')
+    return raw.replace(/<[^>]*>/g, '').replace(/\n{3,}/g, '\n\n').trim()
+  }
 
   const handleReply = (mode: 'reply' | 'replyAll' | 'forward') => {
     if (onReply) {
@@ -105,6 +219,20 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
         from: email.from || [],
         to: email.to || [],
         cc: email.cc,
+        date: email.receivedAt || email.sentAt,
+        textBody: getPlainText(email),
+        // Carry the original's attachments forward (re-referenced by blobId).
+        attachments:
+          mode === 'forward'
+            ? (email.attachments || [])
+                .filter((a: any) => a.blobId)
+                .map((a: any) => ({
+                  blobId: a.blobId,
+                  type: a.type || 'application/octet-stream',
+                  name: a.name || 'attachment',
+                  size: a.size || 0,
+                }))
+            : undefined,
       })
     }
   }
@@ -142,19 +270,43 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
     element?.scrollIntoView({ behavior: 'auto', block: 'start' })
   }
 
-  const handleDownloadAttachment = (attachment: any) => {
+  const handleDownloadAttachment = async (attachment: any) => {
     if (!accountId || !attachment.blobId) return
 
+    const filename = attachment.name || 'attachment'
     const url = jmapClient.getBlobUrl(
       accountId,
       attachment.blobId,
       attachment.type || 'application/octet-stream',
-      attachment.name || 'attachment'
+      filename
     )
+
+    // Desktop: fetch through Rust (auth attached) and save to Downloads.
+    if (isTauri) {
+      const pending = toast.info(`Downloading ${filename}…`, 0)
+      try {
+        const savedPath = await jmapClient.downloadBlob(url, filename)
+        useToastStore.getState().removeToast(pending)
+        if (savedPath) {
+          // SECURITY: save only — do NOT auto-open. The attachment name/extension
+          // is attacker-controlled (a sender can name a file anything), and
+          // auto-launching it with the OS default handler from a "download"
+          // action turns one click into one-click execution of an attacker-chosen
+          // file type (.html → file:// origin, .desktop on Linux, etc.). The user
+          // can open it themselves from the Downloads folder if they choose.
+          toast.success(`Saved to ${savedPath}`)
+        }
+      } catch (err) {
+        useToastStore.getState().removeToast(pending)
+        console.error('[Attachment] download failed:', err)
+        toast.error(`Download failed: ${err instanceof Error ? err.message : err}`)
+      }
+      return
+    }
 
     const link = document.createElement('a')
     link.href = url
-    link.download = attachment.name || 'attachment'
+    link.download = filename
     link.target = '_blank'
     document.body.appendChild(link)
     link.click()
@@ -190,13 +342,15 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
   }
 
   const renderEmailContent = (email: any) => {
-    const htmlBody = email.htmlBody?.[0]
-    const textBody = email.textBody?.[0]
-    const bodyValue = htmlBody
-      ? email.bodyValues[htmlBody.partId]
-      : textBody
-        ? email.bodyValues[textBody.partId]
-        : null
+    const htmlPart = email.htmlBody?.[0]
+    const textPart = email.textBody?.[0]
+    // JMAP reuses the plain-text part as `htmlBody` when an email has no real
+    // HTML alternative — so a present htmlBody isn't enough. Only treat it as
+    // HTML when the part's MIME type actually says so; otherwise render the
+    // text part via <pre> so newlines/indentation survive.
+    const isHtml = htmlPart?.type === 'text/html'
+    const part = isHtml ? htmlPart : textPart ?? htmlPart
+    const bodyValue = part ? email.bodyValues[part.partId] : null
 
     if (!bodyValue) return null
 
@@ -205,7 +359,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
 
     let hasBlockedImages = false
 
-    if (htmlBody) {
+    if (isHtml) {
       const purifyConfig = htmlRichness === 'minimal' ? {
         ALLOWED_TAGS: [
           'p', 'br', 'div', 'span', 'a', 'b', 'i', 'em', 'strong', 'u',
@@ -285,29 +439,36 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
             wrapper.setAttribute('data-original-width', width.toString())
             wrapper.setAttribute('data-original-height', height.toString())
             wrapper.setAttribute('data-image-index', index.toString())
-            
-            wrapper.innerHTML = `
-              <div style="text-align: center; padding: 1rem;">
-                <div style="font-size: 2rem; opacity: 0.3; margin-bottom: 0.5rem;">🖼️</div>
-                <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">${alt}</div>
-                <button 
-                  class="load-single-image" 
-                  data-index="${index}"
-                  style="
-                    padding: 0.25rem 0.75rem;
-                    background: var(--primary-color);
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    font-size: 0.75rem;
-                    cursor: pointer;
-                  "
-                >
-                  Load image
-                </button>
-              </div>
-            `
-            
+
+            // SECURITY: build the placeholder with DOM APIs and set the
+            // attacker-controlled `alt` via textContent. Never interpolate `alt`
+            // (or any email-derived value) into innerHTML — doing so re-injects
+            // markup that bypasses the earlier DOMPurify pass (the result is
+            // rendered later via dangerouslySetInnerHTML without re-sanitizing).
+            const box = doc.createElement('div')
+            box.style.cssText = 'text-align:center;padding:1rem;'
+
+            const iconEl = doc.createElement('div')
+            iconEl.style.cssText = 'font-size:2rem;opacity:0.3;margin-bottom:0.5rem;'
+            iconEl.textContent = '🖼️'
+
+            const labelEl = doc.createElement('div')
+            labelEl.style.cssText =
+              'font-size:0.875rem;color:var(--text-secondary);margin-bottom:0.5rem;'
+            labelEl.textContent = alt // safe: rendered as text, not parsed as HTML
+
+            const btn = doc.createElement('button')
+            btn.className = 'load-single-image'
+            btn.setAttribute('data-index', index.toString())
+            btn.style.cssText =
+              'padding:0.25rem 0.75rem;background:var(--primary-color);color:white;border:none;border-radius:4px;font-size:0.75rem;cursor:pointer;'
+            btn.textContent = 'Load image'
+
+            box.appendChild(iconEl)
+            box.appendChild(labelEl)
+            box.appendChild(btn)
+            wrapper.appendChild(box)
+
             img.parentNode?.replaceChild(wrapper, img)
           }
         })
@@ -325,7 +486,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
               </div>
               <button
                 onClick={() => toggleImageLoading(email.id)}
-                className="text-sm px-3 py-1 bg-[var(--primary-color)] text-white rounded hover:bg-[var(--primary-hover)]"
+                className="text-sm px-3 py-1 bg-[var(--primary-color)] text-[var(--on-primary)] rounded hover:bg-[var(--primary-hover)]"
               >
                 Load all images
               </button>
@@ -340,9 +501,11 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
     }
 
     return (
-      <pre className="whitespace-pre-wrap font-sans text-[var(--text-primary)]">
-        {bodyValue.value}
-      </pre>
+      <div
+        className="email-content email-plaintext text-[var(--text-primary)]"
+        style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(plainTextToHtml(bodyValue.value)) }}
+      />
     )
   }
 

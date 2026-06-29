@@ -1,14 +1,13 @@
 // src/hooks/useIndexedDB.ts
 import { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import Dexie from 'dexie'
 import { db } from '../db'
 import { syncManager } from '../db/sync'
 import { useAuthStore } from '../stores/authStore'
 import { usePrimaryAccountId } from './usePrimaryAccountId'
 import { jmapClient } from '../api/jmap'
 
-function useCurrentUserId(): string | null {
+export function useCurrentUserId(): string | null {
   const session = useAuthStore((state) => state.session)
 
   if (!session?.username) return null
@@ -27,6 +26,58 @@ function useCurrentUserId(): string | null {
   }
 
   return `user_${Math.abs(hash).toString(36)}`
+}
+
+/**
+ * Mount once in the authenticated shell. Initializes the offline sync manager
+ * for the current user and kicks a one-time background pass that indexes every
+ * email locally for offline full-text search. Works in the browser and the
+ * desktop build alike (plain IndexedDB).
+ */
+export function useLocalIndex() {
+  const accountId = usePrimaryAccountId()
+  const session = useAuthStore((state) => state.session)
+  const userId = useCurrentUserId()
+  const queryClient = useQueryClient()
+
+  // Live refresh: when push reports a change (web), refetch the visible lists.
+  // (Tauri has no push and relies on polling.)
+  useEffect(() => {
+    const onChange = () => {
+      queryClient.invalidateQueries({ queryKey: ['emails'] })
+      queryClient.invalidateQueries({ queryKey: ['mailboxes'] })
+    }
+    window.addEventListener('jmap-changed', onChange)
+    window.addEventListener('mailbox-changed', onChange)
+    return () => {
+      window.removeEventListener('jmap-changed', onChange)
+      window.removeEventListener('mailbox-changed', onChange)
+    }
+  }, [queryClient])
+
+  useEffect(() => {
+    if (!userId || !accountId || !session) return
+
+    let cancelled = false
+    syncManager
+      .initializeUser(userId)
+      .then(() => {
+        if (cancelled) return
+        syncManager.startPushSync(accountId)
+        // Fire-and-forget; no-ops if a full pass already ran recently.
+        syncManager.ensureFullIndex(accountId).catch((e) => {
+          if (import.meta.env.DEV) console.error('[LocalIndex] full index failed:', e)
+        })
+      })
+      .catch((error) => {
+        if (import.meta.env.DEV) console.error('[LocalIndex] init failed:', error)
+      })
+
+    return () => {
+      cancelled = true
+      syncManager.stop()
+    }
+  }, [userId, accountId, session])
 }
 
 export function useOfflineEmails(mailboxId: string | null) {
@@ -67,10 +118,7 @@ export function useOfflineEmails(mailboxId: string | null) {
 
         // Always try to get cached emails first
         const cachedEmails = await syncManager.getMailboxEmails(mailboxId, 0, 50)
-        const cachedTotal = await db.emails
-          .where('[_userId+_mailboxIds+receivedAt]')
-          .between([userId, mailboxId, Dexie.minKey], [userId, mailboxId, Dexie.maxKey])
-          .count()
+        const cachedTotal = await syncManager.countCachedEmails(userId, mailboxId)
 
         // Return cached data immediately if available
         if (cachedEmails.length > 0) {
@@ -195,10 +243,7 @@ export function useOfflineEmailsInfinite(mailboxId: string | null) {
 
         // Get first batch from cache
         const emails = await syncManager.getMailboxEmails(mailboxId, 0, 50)
-        const total = await db.emails
-          .where('[_userId+_mailboxIds+receivedAt]')
-          .between([userId, mailboxId, Dexie.minKey], [userId, mailboxId, Dexie.maxKey])
-          .count()
+        const total = await syncManager.countCachedEmails(userId, mailboxId)
 
         return {
           emails,

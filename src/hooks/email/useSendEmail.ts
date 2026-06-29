@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { jmapClient } from '../../api/jmap'
 import { useAuthStore } from '../../stores/authStore'
 import { usePrimaryAccountId } from '../usePrimaryAccountId'
+import { toast } from '../../stores/toastStore'
 
 export function useSendEmail() {
   const queryClient = useQueryClient()
@@ -18,6 +19,7 @@ export function useSendEmail() {
       htmlBody,
       inReplyTo,
       attachments,
+      fromIdentity,
     }: {
       to: Array<{ name?: string; email: string }>
       cc?: Array<{ name?: string; email: string }>
@@ -27,6 +29,7 @@ export function useSendEmail() {
       htmlBody?: string
       inReplyTo?: string
       attachments?: Array<{ blobId: string; type: string; name: string }>
+      fromIdentity?: { id: string; email: string; name?: string } | null
     }) => {
       if (!accountId) throw new Error('No account ID')
       if (!session) throw new Error('No session')
@@ -54,23 +57,28 @@ export function useSendEmail() {
       if (cc) validateEmailAddresses(cc, 'cc')
       if (bcc) validateEmailAddresses(bcc, 'bcc')
 
-      // Get user's identity first
-      const identityResponse = await jmapClient.request([
-        [
-          'Identity/get',
-          {
-            accountId,
-            properties: null
-          },
-          'getIdentity'
-        ]
-      ])
+      // Use provided identity or get default identity
+      let identity = fromIdentity
 
-      const [, identityResult] = identityResponse[0]
-      const identity = identityResult.list?.[0]
-      
       if (!identity) {
-        throw new Error('No identity found for account')
+        console.log('[useSendEmail] No identity provided, fetching default...')
+        const identityResponse = await jmapClient.request([
+          [
+            'Identity/get',
+            {
+              accountId,
+              properties: null
+            },
+            'getIdentity'
+          ]
+        ])
+
+        const [, identityResult] = identityResponse[0]
+        identity = identityResult.list?.[0]
+
+        if (!identity) {
+          throw new Error('No identity found for account')
+        }
       }
 
       console.log('[useSendEmail] Using identity:', identity)
@@ -94,11 +102,6 @@ export function useSendEmail() {
       })
 
       // Build body structure according to JMAP spec
-      const bodyStructure: any = {
-        type: 'text/plain',
-        partId: 'text',
-      }
-
       const bodyValues: any = {
         'text': {
           value: textBody || '',
@@ -107,25 +110,37 @@ export function useSendEmail() {
         }
       }
 
-      // If we have HTML, make it multipart
+      // The message body: plain text, or multipart/alternative with HTML.
+      let bodyPart: any = { type: 'text/plain', partId: 'text' }
       if (htmlBody) {
-        bodyStructure.type = 'multipart/alternative'
-        bodyStructure.subParts = [
-          {
-            type: 'text/plain',
-            partId: 'text'
-          },
-          {
-            type: 'text/html',
-            partId: 'html'
-          }
-        ]
-        delete bodyStructure.partId
-
+        bodyPart = {
+          type: 'multipart/alternative',
+          subParts: [
+            { type: 'text/plain', partId: 'text' },
+            { type: 'text/html', partId: 'html' },
+          ],
+        }
         bodyValues['html'] = {
           value: htmlBody,
           isEncodingProblem: false,
           isTruncated: false
+        }
+      }
+
+      // With attachments, wrap body + attachment parts in multipart/mixed.
+      let bodyStructure: any = bodyPart
+      if (attachments && attachments.length > 0) {
+        bodyStructure = {
+          type: 'multipart/mixed',
+          subParts: [
+            bodyPart,
+            ...attachments.map((a) => ({
+              blobId: a.blobId,
+              type: a.type,
+              name: a.name,
+              disposition: 'attachment',
+            })),
+          ],
         }
       }
 
@@ -271,6 +286,7 @@ export function useSendEmail() {
       return { createResult, submitResult }
     },
     onSuccess: () => {
+      toast.success('Message sent')
       if (accountId) {
         // Refresh emails to show the sent message
         queryClient.invalidateQueries({ queryKey: ['emails', accountId] })
@@ -279,6 +295,7 @@ export function useSendEmail() {
     },
     onError: (error) => {
       console.error('[useSendEmail] Email send failed:', error.message || 'Unknown error')
+      toast.error(`Send failed: ${error.message || 'Unknown error'}`)
     },
   })
 }
