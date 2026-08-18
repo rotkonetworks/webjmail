@@ -1,0 +1,684 @@
+/* Reset and base styles */
+@import '@unocss/reset/tailwind.css';
+
+/* UnoCSS directives */
+@unocss all;
+
+/* Theme Variables */
+:root {
+  --sidebar-width: 240px;
+  --header-height: 56px;
+  --sidebar-min-width: 180px;
+  --sidebar-max-width: 400px;
+  --message-list-min-width: 250px;
+  --message-list-max-width: 600px;
+}
+
+/* Monokai Dark Theme (default) */
+[data-theme='dark'] {
+  /* Render native controls (select option popups, scrollbars, date pickers)
+     in dark — CSS custom properties don't reach the OS-drawn popup. */
+  color-scheme: dark;
+  /* Monokai colors */
+  --bg-primary: #272822;
+  --bg-secondary: #1e1f1c;
+  --bg-tertiary: #32332c;
+  --bg-elevated: #3a3b33;
+  --text-primary: #f8f8f2;
+  --text-secondary: #d3d3d3;
+  --text-tertiary: #a6a6a0;
+  --border-color: #414339;
+  /* Readable text to place ON the bright accent/primary fills. */
+  --on-primary: #1c1d18;
+  --on-accent: #1c1d18;
+
+  /* Monokai accent colors - using provided palette */
+  --accent-pink: #ff6188;
+  --accent-orange: #fc9867;
+  --accent-yellow: #ffd866;
+  --accent-green: #a9dc76;
+  --accent-cyan: #78dce8;
+  --accent-blue: #78dce8;
+
+  /* UI specific */
+  --primary-color: #ff6188;
+  --primary-hover: #ff4d7d;
+  --compose-btn: #ff6188;
+  --unread-dot: #78dce8;
+  --proton-purple: #ff6188;
+}
+
+/* Polkadot Light Theme */
+[data-theme='light'] {
+  color-scheme: light;
+  /* Polkadot brand colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e8e8e8;
+  --bg-elevated: #eeeeee;
+  --text-primary: #000000;
+  --text-secondary: #5e5e5e;
+  --text-tertiary: #999999;
+  --border-color: #dce2e9;
+  --on-primary: #ffffff;
+  --on-accent: #14202b;
+
+  /* Monokai accent colors - adapted for light theme */
+  --accent-pink: #d1477a;
+  --accent-orange: #e6825a;
+  --accent-yellow: #d4c441;
+  --accent-green: #85b862;
+  --accent-cyan: #5cb3c4;
+  --accent-blue: #5cb3c4;
+
+  /* UI specific */
+  --primary-color: #d1477a;
+  --primary-hover: #b83d68;
+  --compose-btn: #d1477a;
+  --unread-dot: #5cb3c4;
+  --proton-purple: #d1477a;
+}
+
+/* Auto theme detection */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    /* Copy light theme values */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f5;
+    --bg-tertiary: #e8e8e8;
+    --bg-elevated: #eeeeee;
+    --text-primary: #000000;
+    --text-secondary: #5e5e5e;
+    --text-tertiary: #999999;
+    --border-color: #dce2e9;
+    --on-primary: #ffffff;
+    --on-accent: #14202b;
+    --accent-pink: #d1477a;
+    --accent-orange: #e6825a;
+    --accent-yellow: #d4c441;
+    --accent-green: #85b862;
+    --accent-cyan: #5cb3c4;
+    --accent-blue: #5cb3c4;
+    --primary-color: #d1477a;
+    --primary-hover: #b83d68;
+    --compose-btn: #d1477a;
+    --unread-dot: #5cb3c4;
+    --proton-purple: #d1477a;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    /* Copy dark theme values */
+    --bg-primary: #272822;
+    --bg-secondary: #1e1f1c;
+    --bg-tertiary: #32332c;
+    --bg-elevated: #3a3b33;
+    --text-primary: #f8f8f2;
+    --text-secondary: #d3d3d3;
+    --text-tertiary: #a6a6a0;
+    --border-color: #414339;
+    --on-primary: #1c1d18;
+    --on-accent: #1c1d18;
+    --accent-pink: #ff6188;
+    --accent-orange: #fc9867;
+    --accent-yellow: #ffd866;
+    --accent-green: #a9dc76;
+    --accent-cyan: #78dce8;
+    --accent-blue: #78dce8;
+    --primary-color: #ff6188;
+    --primary-hover: #ff4d7d;
+    --compose-btn: #ff6188;
+    --unread-dot: #78dce8;
+    --proton-purple: #ff6188;
+  }
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(
+    --font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Roboto',
+    'Helvetica Neue',
+    Arial,
+    sans-serif
+  );
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Font families */
+[data-font='system'] {
+  --font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+}
+
+[data-font='mono'] {
+  --font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+[data-font='serif'] {
+  --font-family: 'Georgia', 'Times New Roman', serif;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* Search input styles */
+.search-input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.search-input:focus {
+  background: var(--bg-tertiary);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Button styles */
+.btn-primary {
+  background: var(--primary-color);
+  color: var(--on-primary);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--border-color);
+}
+
+/* Email list hover effect */
+.email-item {
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+}
+
+.email-item:hover {
+  background: var(--bg-tertiary);
+  border-left-color: var(--primary-color);
+}
+
+.email-item.selected {
+  background: var(--bg-tertiary);
+  border-left-color: var(--primary-color);
+}
+
+/* Timeline marker */
+.timeline-marker {
+  position: relative;
+}
+
+.timeline-marker::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background: var(--primary-color);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Unread indicator */
+.unread-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--unread-dot);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--unread-dot);
+}
+
+/* Label colors */
+.label {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.label-pink {
+  background: color-mix(in srgb, var(--accent-pink) 20%, transparent);
+  color: var(--accent-pink);
+}
+
+.label-blue {
+  background: color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  color: var(--accent-blue);
+}
+
+.label-green {
+  background: color-mix(in srgb, var(--accent-green) 20%, transparent);
+  color: var(--accent-green);
+}
+
+/* Animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Compose button */
+.compose-btn {
+  background: var(--compose-btn);
+  color: var(--on-primary);
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.compose-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Settings button */
+.settings-btn {
+  background: var(--compose-btn);
+  color: var(--on-primary);
+}
+
+/* Focus styles */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* The closed <select> control follows the theme; the option popup itself is
+   drawn natively and is themed via `color-scheme` on the root (set per theme
+   above) — forcing option background-color here causes white-on-white because
+   the native popup's text color can't be paired with it. */
+select {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* Email thread timeline */
+.email-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+
+.email-timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--primary-color), var(--border-color));
+}
+
+/* Quick search highlights */
+.search-highlight {
+  background: color-mix(in srgb, var(--accent-yellow) 30%, transparent);
+  color: var(--text-primary);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* Empty state */
+.empty-state {
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 48px;
+}
+
+.empty-state-icon {
+  font-size: 64px;
+  opacity: 0.3;
+  margin-bottom: 16px;
+}
+
+/* Radio input custom styling */
+input[type='radio'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+}
+
+input[type='radio']:checked {
+  border-color: var(--primary-color);
+}
+
+input[type='radio']:checked::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  background: var(--primary-color);
+  border-radius: 50%;
+}
+
+/* Theme selector buttons */
+.theme-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-btn.selected {
+  border-color: var(--primary-color);
+  transform: scale(1.1);
+}
+
+.theme-btn:hover {
+  transform: scale(1.05);
+}
+
+/* Prose styles for email content */
+.prose {
+  color: var(--text-primary);
+}
+
+.prose a {
+  color: var(--accent-blue);
+  text-decoration: underline;
+}
+
+.prose strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.prose blockquote {
+  border-left: 4px solid var(--border-color);
+  padding-left: 1rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.prose img {
+  max-width: 100%;
+  height: auto;
+}
+
+.prose .table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 1rem 0;
+}
+
+.prose table {
+  min-width: 100%;
+  table-layout: auto;
+}
+
+@media (max-width: 768px) {
+  .prose table {
+    font-size: 0.875rem;
+  }
+  .prose td,
+  .prose th {
+    padding: 0.25rem;
+    white-space: nowrap;
+  }
+}
+.prose table {
+  width: 100%;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: collapse;
+}
+
+.prose td,
+.prose th {
+  border: 1px solid var(--border-color);
+  padding: 0.5rem;
+}
+
+.prose th {
+  background-color: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Thread timeline scrollbar */
+.timeline-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.timeline-scrollbar::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+.timeline-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 5px;
+}
+
+.timeline-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 768px) {
+  /* Hide desktop-only decorations. NOTE: .timeline-scrollbar is the actual
+     email body scroll CONTAINER (custom-scrollbar styling), NOT a decoration —
+     hiding it here removed the whole email body on mobile. Only the timeline
+     line/markers and the desktop search input should hide. */
+  .timeline-marker::before,
+  .email-timeline::before,
+  .search-input {
+    display: none;
+  }
+  
+  /* Larger touch targets */
+  .email-item {
+    padding: 1rem;
+    min-height: 80px;
+  }
+  
+  button {
+    min-height: 44px;
+  }
+  
+  /* Full width composer */
+  .fixed[style*="right"] {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+  }
+  
+  /* Better mobile scrolling */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* No hover effects on touch devices */
+  @media (hover: none) {
+    .email-item:hover {
+      background: inherit;
+    }
+    
+    button:hover {
+      background: inherit;
+    }
+  }
+  
+  /* Adjust header for mobile */
+  .compose-btn span {
+    display: none;
+  }
+  
+  /* Mobile-optimized empty state */
+  .empty-state {
+    padding: 24px;
+  }
+  
+  .empty-state-icon {
+    font-size: 48px;
+  }
+}
+
+/* ============================================================
+   Motion & smoothness
+   ============================================================ */
+
+/* Fill transition gaps: any interactive element without its own transition
+   gets a smooth hover. Component-level `transition-*` classes still win. */
+button,
+a,
+[role='button'],
+summary {
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.1s ease;
+}
+
+/* Visible, consistent keyboard focus. */
+:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Command palette entrance. */
+@keyframes cmdp-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes cmdp-pop {
+  from { opacity: 0; transform: translateY(-8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.cmdp-in { animation: cmdp-fade 0.12s ease; }
+.cmdp-panel { animation: cmdp-pop 0.16s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Gentle content fade for view switches. */
+@keyframes view-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.view-fade { animation: view-fade 0.18s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Skeleton placeholders. */
+@keyframes sk-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.sk {
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  animation: sk-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk { animation: none; opacity: 0.7; }
+}

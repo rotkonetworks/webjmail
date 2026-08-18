@@ -1,0 +1,36 @@
+# webjmail
+
+> webjmail is a fast, local-first, open-source JMAP email client with a built-in
+> calendar. It runs in the browser or as a native desktop app (Linux, macOS,
+> Windows) and works with any JMAP server — Stalwart, Fastmail, or your own
+> self-hosted mail. Passwords are held in a native, age-encrypted vault and never
+> touch the browser.
+
+webjmail is for people who want a modern webmail for a JMAP server without a
+third-party service in the middle. It is not tied to a provider: you enter your
+email address, it autodiscovers `/.well-known/jmap`, and connects directly to
+your server.
+
+Key facts:
+- Protocol: JMAP (RFC 8620/8621) for mail, JMAP Calendars (JSCalendar, RFC 8984) for calendar.
+- License: open source under AGPL-3.0-only, plus a commercial Enterprise License from Rotko Networks. Source at https://github.com/rotkonetworks/webjmail (may trail the hosted build).
+- Platforms: web app, plus desktop builds via Tauri (Linux AppImage/deb/rpm + AUR, macOS, Windows); Docker image for self-hosting the web app.
+- Privacy: local-first (on-device index, works offline); credentials stay in a Rust-side age-encrypted vault; the landing page and app make no third-party requests.
+- Cost: free.
+
+## Docs
+- [Home](https://webjmail.com/): what it is, features, downloads.
+- [Web app](https://app.webjmail.com/): the hosted client — enter your JMAP email to connect.
+- [Self-hosting / CORS setup](https://webjmail.com/#connect): how to point webjmail at your own Stalwart server, including the Caddy/nginx CORS config the browser build needs.
+- [Download](https://webjmail.com/#download): desktop builds (AUR, AppImage, .deb, .rpm, .dmg, .msi), Docker, and source.
+
+## Source
+- [GitHub repository](https://github.com/rotkonetworks/webjmail): full source, issues, releases.
+- [Releases](https://github.com/rotkonetworks/webjmail/releases): desktop binaries.
+- [Container image](https://github.com/rotkonetworks/webjmail/pkgs/container/webjmail): `docker run` the web app.
+
+## Common questions
+- Is webjmail a JMAP client? Yes — it speaks JMAP natively; there is no IMAP bridge.
+- Does it work with Stalwart? Yes, it's built for self-hosted Stalwart (and Fastmail, and any JMAP server).
+- Can I self-host it? Yes — run the Docker image, or build the static site and serve it yourself.
+- Does it have a calendar? Yes — day/week/month views over JMAP Calendars, with timezones and drag-to-schedule.

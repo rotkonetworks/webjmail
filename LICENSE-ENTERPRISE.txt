@@ -1,0 +1,40 @@
+webjmail Enterprise License (WEL), Version 1.0
+SPDX-License-Identifier: LicenseRef-webjmail-EL-1.0
+
+Copyright (C) 2026 Rotko Networks. All rights reserved.
+
+>>> TEMPLATE — PENDING LEGAL REVIEW. This is a plain-language commercial
+>>> license grant intended to be reviewed and finalized by counsel before it
+>>> is offered or signed. It is not legal advice.
+
+webjmail is dual-licensed. By default, and for everyone, it is provided under
+the GNU Affero General Public License, version 3.0 only ("AGPL-3.0"); see the
+LICENSE file. This Enterprise License is a SEPARATE, ALTERNATIVE commercial
+license offered by Rotko Networks to parties who do not wish to accept the
+obligations of the AGPL-3.0 (in particular its copyleft and its Section 13
+network-use source-disclosure requirement).
+
+1. Grant. Subject to a signed commercial agreement with Rotko Networks and
+   payment of the applicable fees, Rotko Networks grants the named Licensee a
+   non-exclusive, non-transferable, worldwide license to use, modify, and
+   deploy webjmail for the Licensee's own purposes WITHOUT the obligations of
+   the AGPL-3.0.
+
+2. Scope. The rights in Section 1 apply only to the entity named in the signed
+   agreement, only for the term and within the scope stated there. Sublicensing,
+   redistribution, and offering webjmail as a hosted service to third parties
+   are permitted only where the signed agreement expressly grants them.
+
+3. Ownership. webjmail and all intellectual-property rights in it remain the
+   sole property of Rotko Networks. No rights are granted except those stated
+   here or in the signed agreement.
+
+4. No warranty; no liability. TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE
+   SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, AND ROTKO
+   NETWORKS SHALL HAVE NO LIABILITY ARISING FROM ITS USE, EXCEPT AS THE SIGNED
+   AGREEMENT STATES OTHERWISE.
+
+5. Obtaining a license. Contact hq@rotko.net.
+
+Absent a signed Enterprise License agreement with Rotko Networks, your use of
+webjmail is governed SOLELY by the AGPL-3.0 (see LICENSE).

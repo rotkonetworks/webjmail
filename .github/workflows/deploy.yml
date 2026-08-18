@@ -1,0 +1,79 @@
+name: deploy
+
+# dev      → pull request : build + type-check only (no server change)
+# staging  → push master  : rsync build to web.rotko.net, deploy staging.webjmail.com
+# prod     → manual run    : deploy webjmail.com + app.webjmail.com
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: latest }
+      - run: bun install --frozen-lockfile
+      - run: bun run type-check
+      - run: bun run build # → dist/
+      - uses: actions/upload-artifact@v4
+        with: { name: site, path: dist, retention-days: 3 }
+
+  deploy:
+    # Only on master push (staging) or manual dispatch (prod) — never on PRs.
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'production' || 'staging' }}
+    env:
+      TARGET: ${{ github.event_name == 'workflow_dispatch' && 'prod' || 'staging' }}
+    steps:
+      # Skip the server deploy gracefully when the SSH secrets aren't configured
+      # (e.g. deploys are done manually). The build job still gates the push.
+      - name: Check deploy secrets
+        id: guard
+        run: |
+          if [ -n "${{ secrets.WEBJMAIL_DEPLOY_KEY }}" ] && [ -n "${{ secrets.WEBJMAIL_SSH_HOST }}" ] && [ -n "${{ secrets.WEBJMAIL_SSH_USER }}" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy skipped::SSH deploy secrets not set (WEBJMAIL_DEPLOY_KEY / WEBJMAIL_SSH_HOST / WEBJMAIL_SSH_USER). Build passed; server deploy skipped."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.ok == 'true'
+      - uses: actions/download-artifact@v4
+        if: steps.guard.outputs.ok == 'true'
+        with: { name: site, path: dist }
+
+      - name: SSH setup
+        if: steps.guard.outputs.ok == 'true'
+        run: |
+          install -m600 /dev/stdin ~/deploy_key <<< "${{ secrets.WEBJMAIL_DEPLOY_KEY }}"
+          mkdir -p ~/.ssh && ssh-keyscan -H "${{ secrets.WEBJMAIL_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Push files
+        if: steps.guard.outputs.ok == 'true'
+        env:
+          H: ${{ secrets.WEBJMAIL_SSH_USER }}@${{ secrets.WEBJMAIL_SSH_HOST }}
+          RSH: ssh -i ~/deploy_key -o IdentitiesOnly=yes
+        run: |
+          SUFFIX=""; [ "$TARGET" = staging ] && SUFFIX="-staging"
+          $RSH "$H" "mkdir -p /srv/webjmail/lander$SUFFIX /srv/webjmail/app$SUFFIX"
+          rsync -az --delete -e "$RSH" landing/ "$H:/srv/webjmail/lander$SUFFIX/"
+          rsync -az --delete -e "$RSH" dist/    "$H:/srv/webjmail/app$SUFFIX/"
+
+      - name: Deploy on box
+        if: steps.guard.outputs.ok == 'true'
+        env:
+          H: ${{ secrets.WEBJMAIL_SSH_USER }}@${{ secrets.WEBJMAIL_SSH_HOST }}
+        run: |
+          scp -i ~/deploy_key -o IdentitiesOnly=yes scripts/deploy-webjmail.sh "$H:/root/deploy-webjmail.sh"
+          ssh -i ~/deploy_key -o IdentitiesOnly=yes "$H" "chmod +x /root/deploy-webjmail.sh && /root/deploy-webjmail.sh $TARGET"
