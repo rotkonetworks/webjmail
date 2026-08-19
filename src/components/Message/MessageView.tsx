@@ -340,11 +340,6 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
     })
   }
 
-  const scrollToEmail = (emailId: string) => {
-    const element = emailRefs.current.get(email.id)
-    element?.scrollIntoView({ behavior: 'auto', block: 'start' })
-  }
-
   const handleDownloadAttachment = async (attachment: any) => {
     if (!accountId || !attachment.blobId) return
 
@@ -614,7 +609,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
   }
 
   return (
-    <div className="h-full flex flex-col md:flex-row">
+    <div className="h-full flex flex-col">
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         {/* Action bar */}
         <div className="flex items-center justify-between gap-2 p-4 border-b border-[var(--border-color)] text-[var(--text-secondary)]">
@@ -832,41 +827,6 @@ ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
         )}
       </div>
 
-      {/* Timeline navigation bar - hide on mobile */}
-      {!isMobile && displayEmails.length > 1 && (
-        <div className="w-16 bg-[var(--bg-secondary)] border-l border-[var(--border-color)] p-2">
-          <div className="text-xs text-[var(--text-tertiary)] text-center mb-2">Timeline</div>
-          <div className="relative h-full">
-            {[...displayEmails]
-              .sort((a, b) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime())
-              .map((threadEmail, index, chronologicalEmails) => {
-                const position = (index / (chronologicalEmails.length - 1)) * 100
-                const date = new Date(threadEmail.receivedAt)
-                const isCurrent = threadEmail.id === email.id
-
-                return (
-                  <button
-                    key={threadEmail.id}
-                    onClick={() => scrollToEmail(threadEmail.id)}
-                    className="absolute left-1/2 -translate-x-1/2 group"
-                    style={{ top: `${position}%` }}
-                    title={format(date, 'MMM d, HH:mm')}
-                  >
-                    <div
-                      className={`
-w-3 h-3 rounded-full group-hover:scale-110
-${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
-`}
-                    />
-                    <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 whitespace-nowrap text-xs bg-black/80 px-2 py-1 rounded">
-                      {format(date, 'MMM d')}
-                    </div>
-                  </button>
-                )
-              })}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
