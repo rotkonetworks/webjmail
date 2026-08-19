@@ -67,7 +67,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
       <header className="h-14 flex-shrink-0 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex items-center justify-between px-3">
         {/* Logo only */}
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-[var(--proton-purple)] rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-[var(--primary-color)] rounded-lg flex items-center justify-center">
             <div className="i-lucide:mail text-white text-base" />
           </div>
           <span className="font-semibold">{config.appName}</span>
@@ -116,7 +116,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
     <header className="h-[var(--header-height)] flex-shrink-0 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] flex items-center px-4 gap-4">
       {/* Logo */}
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 bg-[var(--proton-purple)] rounded-lg flex items-center justify-center">
+        <div className="w-9 h-9 bg-[var(--primary-color)] rounded-lg flex items-center justify-center">
           <div className="i-lucide:mail text-white text-lg" />
         </div>
         <span className="font-semibold text-lg">{config.appName}</span>

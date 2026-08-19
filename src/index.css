@@ -45,7 +45,6 @@
   --primary-hover: #ff4d7d;
   --compose-btn: #ff6188;
   --unread-dot: #78dce8;
-  --proton-purple: #ff6188;
 }
 
 /* Polkadot Light Theme */
@@ -76,7 +75,6 @@
   --primary-hover: #b83d68;
   --compose-btn: #d1477a;
   --unread-dot: #5cb3c4;
-  --proton-purple: #d1477a;
 }
 
 /* Auto theme detection */
@@ -104,7 +102,6 @@
     --primary-hover: #b83d68;
     --compose-btn: #d1477a;
     --unread-dot: #5cb3c4;
-    --proton-purple: #d1477a;
   }
 }
 
@@ -132,7 +129,6 @@
     --primary-hover: #ff4d7d;
     --compose-btn: #ff6188;
     --unread-dot: #78dce8;
-    --proton-purple: #ff6188;
   }
 }
 
@@ -351,14 +347,9 @@ body {
   color: var(--on-primary);
 }
 
-/* Focus styles */
+/* Focus styles — keyboard focus ring lives in the Motion section below. */
 :focus {
   outline: none;
-}
-
-:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
 }
 
 /* The closed <select> control follows the theme; the option popup itself is
@@ -491,8 +482,11 @@ input[type='radio']:checked::after {
 }
 
 .prose table {
-  min-width: 100%;
-  table-layout: auto;
+  width: 100%;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: collapse;
 }
 
 @media (max-width: 768px) {
@@ -505,13 +499,6 @@ input[type='radio']:checked::after {
     white-space: nowrap;
   }
 }
-.prose table {
-  width: 100%;
-  display: block;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  border-collapse: collapse;
-}
 
 .prose td,
 .prose th {
@@ -522,17 +509,6 @@ input[type='radio']:checked::after {
 .prose th {
   background-color: var(--bg-tertiary);
   font-weight: 600;
-}
-
-/* Loading spinner */
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
 }
 
 /* Thread timeline scrollbar */
@@ -574,14 +550,7 @@ input[type='radio']:checked::after {
   button {
     min-height: 44px;
   }
-  
-  /* Full width composer */
-  .fixed[style*="right"] {
-    left: 0 !important;
-    right: 0 !important;
-    width: 100% !important;
-  }
-  
+
   /* Better mobile scrolling */
   * {
     -webkit-tap-highlight-color: transparent;

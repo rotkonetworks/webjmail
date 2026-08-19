@@ -64,7 +64,7 @@ export function Onboarding({ onDone }: OnboardingProps) {
         {/* Header / progress */}
         <div className="p-5 border-b border-[var(--border-color)]">
           <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 bg-[var(--proton-purple)] rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-[var(--primary-color)] rounded-lg flex items-center justify-center">
               <div className="i-lucide:mail text-[var(--on-primary)]" />
             </div>
             <span className="font-semibold text-[var(--text-primary)]">{config.appName}</span>
