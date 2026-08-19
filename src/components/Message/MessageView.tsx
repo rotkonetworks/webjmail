@@ -617,8 +617,8 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
     <div className="h-full flex flex-col md:flex-row">
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         {/* Action bar */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)] text-[var(--text-secondary)]">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2 p-4 border-b border-[var(--border-color)] text-[var(--text-secondary)]">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {/* Always show back button on mobile or when onClose is provided */}
             {(isMobile || onClose) && (
               <button
@@ -626,22 +626,22 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
                   selectEmail(null)
                   onClose?.()
                 }}
-                className="p-2 hover:bg-white/10 rounded-lg"
+                className="p-2 hover:bg-white/10 rounded-lg flex-shrink-0"
                 title="Back"
               >
                 <div className="i-lucide:arrow-left" />
               </button>
             )}
-            <h2 className="text-lg font-medium text-[var(--text-primary)] truncate">
+            <h2 className="text-lg font-medium text-[var(--text-primary)] truncate min-w-0">
               {email.subject || '(no subject)'}
             </h2>
             {displayEmails.length > 1 && !isMobile && (
-              <span className="text-sm text-[var(--text-tertiary)] ml-2">
+              <span className="text-sm text-[var(--text-tertiary)] ml-2 flex-shrink-0">
                 ({displayEmails.length} messages)
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
             {!isMobile && (
               <>
                 <button
