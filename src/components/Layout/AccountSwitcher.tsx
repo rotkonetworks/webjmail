@@ -10,6 +10,7 @@ export function AccountSwitcher({ compact = false }: { compact?: boolean }) {
   const activeAccount = useAuthStore((s) => s.activeAccount)
   const switchAccount = useAuthStore((s) => s.switchAccount)
   const removeAccount = useAuthStore((s) => s.removeAccount)
+  const logout = useAuthStore((s) => s.logout)
   const isLoading = useAuthStore((s) => s.isLoading)
   const session = useAuthStore((s) => s.session)
   const unreadByAccount = useUnreadStore((s) => s.byAccount)
@@ -117,6 +118,19 @@ export function AccountSwitcher({ compact = false }: { compact?: boolean }) {
                 <div className="i-lucide:plus text-[var(--text-secondary)]" />
               </div>
               Add another account
+            </button>
+            <button
+              onClick={() => {
+                setOpen(false)
+                logout()
+              }}
+              className="w-full px-3 py-2 flex items-center gap-3 text-left hover:bg-white/10 transition-colors text-sm text-[var(--text-secondary)] hover:text-red-400"
+              title="Sign out of all accounts on this device"
+            >
+              <div className="w-7 h-7 rounded-full flex items-center justify-center">
+                <div className="i-lucide:log-out text-[var(--text-tertiary)]" />
+              </div>
+              Sign out
             </button>
           </div>
         </div>

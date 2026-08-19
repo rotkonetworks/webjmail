@@ -1,10 +1,11 @@
 // src/db/sync.ts
 import { db, type CachedEmail } from './index'
 import { jmapClient } from '../api/jmap'
-import { Email } from '../api/types'
+import { Email, Mailbox } from '../api/types'
 import { config } from '../config'
 import { isTauri } from '../lib/tauri'
 import { useSyncStatusStore } from '../stores/syncStatusStore'
+import { toast } from '../stores/toastStore'
 
 const stripHtml = (s: string) => s.replace(/<[^>]*>/g, ' ')
 
@@ -36,11 +37,76 @@ function buildSearchText(email: Email): string {
 }
 
 export class SyncManager {
+  // Logged once per session (not per account switch) — see startPushSync.
+  static pushNoticeLogged = false
   private syncInterval: number | null = null
   private eventSource: EventSource | null = null
   private currentUserId: string | null = null
   // Guards so the background full index runs at most once per session.
   private fullIndexRunning = false
+  // The local cache is a best-effort mirror of the server. On some platforms
+  // (notably WebKitGTK in the desktop build) IndexedDB writes can fail with
+  // "UnknownError: Unable to store record in object store" — a broken/quota'd
+  // store. When that happens we must NOT let it break mail loading: we try one
+  // reset+rebuild, and if that fails too we run cache-less for the session
+  // (everything served straight from the server). These flags bound that.
+  private cacheDisabled = false
+  private recoveryAttempted = false
+  private degradeNotified = false
+
+  /** True for storage faults where the cache is unusable (not a transient miss). */
+  private isStorageFault(err: unknown): boolean {
+    const m = err instanceof Error ? err.message : String(err)
+    return /unable to store record|unknownerror|quota|object store|delete record from object store|modifying one or more objects|InvalidStateError|not a known object store|database is not open|corrupt/i.test(
+      m
+    )
+  }
+
+  /**
+   * Central handler for an IndexedDB storage fault. First fault: reset the DB
+   * and let the caller rebuild. Second fault: disable the cache for the session
+   * so the app serves everything from the server. Never throws.
+   */
+  private async onStorageFault(err: unknown): Promise<void> {
+    if (this.cacheDisabled) return
+    if (!this.recoveryAttempted && this.isStorageFault(err)) {
+      this.recoveryAttempted = true
+      await this.recoverDatabase()
+      if (!this.degradeNotified) {
+        this.degradeNotified = true
+        toast.info('Local cache was reset and is rebuilding.')
+      }
+      return
+    }
+    // Already tried a reset (or it's an unknown fault) — stop trusting the cache.
+    this.cacheDisabled = true
+    console.warn('[Sync] Local cache disabled for this session; serving from the server.')
+    if (!this.degradeNotified) {
+      this.degradeNotified = true
+      toast.info('Local mail cache is unavailable — showing mail from the server. Search may be incomplete.')
+    }
+  }
+
+  /** Best-effort cache write: swallow storage faults so callers never break. */
+  private async safeWrite(op: () => Promise<void>): Promise<void> {
+    if (this.cacheDisabled) return
+    try {
+      await op()
+    } catch (err) {
+      await this.onStorageFault(err)
+    }
+  }
+
+  /** Best-effort cache read: return `fallback` instead of throwing on a fault. */
+  private async safeRead<T>(op: () => Promise<T>, fallback: T): Promise<T> {
+    if (this.cacheDisabled) return fallback
+    try {
+      return await op()
+    } catch (err) {
+      await this.onStorageFault(err)
+      return fallback
+    }
+  }
 
   async initializeUser(userId: string) {
     // Validate user ID to prevent injection attacks
@@ -60,7 +126,8 @@ export class SyncManager {
     }
 
     this.currentUserId = userId
-    await db.updateUserActivity(userId)
+    // Best-effort: a broken store must not block sign-in / mail loading.
+    await this.safeWrite(() => db.updateUserActivity(userId))
   }
 
   async initialSync(accountId: string, mailboxId: string) {
@@ -180,17 +247,21 @@ export class SyncManager {
 
       // Diagnostic: surface the account context so an accountId/token mismatch
       // (e.g. primaryAccounts.mail pointing at an account this token can't query)
-      // is visible in the in-app console.
-      const _s = jmapClient.getSession()
-      console.warn(
-        `[Sync] full index: accountId=${accountId} primaryMail=${
-          _s?.primaryAccounts?.['urn:ietf:params:jmap:mail'] ?? '?'
-        } accounts=${_s?.accounts ? Object.keys(_s.accounts).join(',') : '?'}`
+      // is visible in the in-app console. DEV-only — noisy on every switch.
+      if (import.meta.env.DEV) {
+        const _s = jmapClient.getSession()
+        console.log(
+          `[Sync] full index: accountId=${accountId} primaryMail=${
+            _s?.primaryAccounts?.['urn:ietf:params:jmap:mail'] ?? '?'
+          } accounts=${_s?.accounts ? Object.keys(_s.accounts).join(',') : '?'}`
+        )
+      }
+      await this.safeWrite(() =>
+        db.transaction('rw', db.mailboxes, async () => {
+          await db.mailboxes.where('_userId').equals(this.currentUserId!).delete()
+          await db.mailboxes.bulkPut(mailboxes.map((mb) => ({ ...mb, _userId: this.currentUserId! })))
+        })
       )
-      await db.transaction('rw', db.mailboxes, async () => {
-        await db.mailboxes.where('_userId').equals(this.currentUserId!).delete()
-        await db.mailboxes.bulkPut(mailboxes.map((mb) => ({ ...mb, _userId: this.currentUserId! })))
-      })
 
       for (const mailbox of mailboxes) {
         let position = 0
@@ -237,6 +308,13 @@ export class SyncManager {
             console.error(
               `[Sync] Full index aborted — account "${accountId}" is not queryable with the active token: ${msg}`
             )
+            return
+          }
+          // A storage fault isn't per-mailbox — the whole store is unhappy.
+          // Route it through recovery/disable once and stop the pass instead of
+          // logging "N of N failed" for every folder.
+          if (this.isStorageFault(mbErr)) {
+            await this.onStorageFault(mbErr)
             return
           }
           console.error(`[Sync] Skipping mailbox "${mailbox.name}" (${mailbox.id}): ${msg}`)
@@ -340,7 +418,9 @@ export class SyncManager {
    */
   private async cacheEmails(emails: Email[]): Promise<void> {
     if (!this.currentUserId) return
-    await db.emails.bulkPut(emails.map((e) => this.toCached(e, this.currentUserId!)))
+    await this.safeWrite(() =>
+      db.emails.bulkPut(emails.map((e) => this.toCached(e, this.currentUserId!)))
+    )
   }
 
   /**
@@ -374,17 +454,23 @@ export class SyncManager {
    * UI renders instantly on launch (no server round-trip).
    */
   async getCachedEmails(userId: string, mailboxId: string, offset: number, limit: number) {
-    const sorted = await this.mailboxEmailsSorted(userId, mailboxId)
-    return sorted.slice(offset, offset + limit)
+    return this.safeRead(async () => {
+      const sorted = await this.mailboxEmailsSorted(userId, mailboxId)
+      return sorted.slice(offset, offset + limit)
+    }, [] as CachedEmail[])
   }
 
   /** Total emails cached locally for a mailbox. */
   async countCachedEmails(userId: string, mailboxId: string): Promise<number> {
-    return db.emails
-      .where('_mailboxIds')
-      .equals(mailboxId)
-      .filter((e) => e._userId === userId)
-      .count()
+    return this.safeRead(
+      () =>
+        db.emails
+          .where('_mailboxIds')
+          .equals(mailboxId)
+          .filter((e) => e._userId === userId)
+          .count(),
+      0
+    )
   }
 
   /**
@@ -409,7 +495,9 @@ export class SyncManager {
       limit
     )
     const cached = emails.map((e) => this.toCached(e, userId))
-    await db.emails.bulkPut(cached)
+    // Write-through is best-effort: if the store is broken we STILL return the
+    // freshly fetched page so the list renders from the server.
+    await this.safeWrite(() => db.emails.bulkPut(cached))
     return { emails: cached, total, position }
   }
 
@@ -420,7 +508,7 @@ export class SyncManager {
    */
   async removeCachedEmails(ids: string[]): Promise<void> {
     if (ids.length === 0) return
-    await db.emails.bulkDelete(ids)
+    await this.safeWrite(() => db.emails.bulkDelete(ids))
   }
 
   /**
@@ -429,15 +517,17 @@ export class SyncManager {
    */
   async patchCachedKeywords(ids: string[], patch: Record<string, boolean>): Promise<void> {
     if (ids.length === 0) return
-    await db.transaction('rw', db.emails, async () => {
-      for (const id of ids) {
-        const e = await db.emails.get(id)
-        if (e) {
-          e.keywords = { ...e.keywords, ...patch }
-          await db.emails.put(e)
+    await this.safeWrite(() =>
+      db.transaction('rw', db.emails, async () => {
+        for (const id of ids) {
+          const e = await db.emails.get(id)
+          if (e) {
+            e.keywords = { ...e.keywords, ...patch }
+            await db.emails.put(e)
+          }
         }
-      }
-    })
+      })
+    )
   }
 
   /**
@@ -447,33 +537,41 @@ export class SyncManager {
    */
   async setCachedMailbox(ids: string[], mailboxId: string): Promise<void> {
     if (ids.length === 0) return
-    await db.transaction('rw', db.emails, async () => {
-      for (const id of ids) {
-        const e = await db.emails.get(id)
-        if (e) {
-          e.mailboxIds = { [mailboxId]: true }
-          e._mailboxIds = [mailboxId]
-          await db.emails.put(e)
+    await this.safeWrite(() =>
+      db.transaction('rw', db.emails, async () => {
+        for (const id of ids) {
+          const e = await db.emails.get(id)
+          if (e) {
+            e.mailboxIds = { [mailboxId]: true }
+            e._mailboxIds = [mailboxId]
+            await db.emails.put(e)
+          }
         }
-      }
-    })
+      })
+    )
   }
 
   /** Mailboxes cached locally for this user (instant sidebar on launch). */
   async getCachedMailboxes(userId: string) {
-    const rows = await db.mailboxes.where('_userId').equals(userId).toArray()
-    // Drop the storage-only field so callers get plain Mailbox objects.
-    return rows.map(({ _userId, ...mb }) => mb)
+    return this.safeRead(async () => {
+      const rows = await db.mailboxes.where('_userId').equals(userId).toArray()
+      // Drop the storage-only field so callers get plain Mailbox objects.
+      return rows.map(({ _userId, ...mb }) => mb)
+    }, [] as Mailbox[])
   }
 
   /** Fetch mailboxes from the server and persist them for offline/instant use. */
   async fetchAndCacheMailboxes(accountId: string, userId: string) {
     await this.ensureUser(userId)
     const mailboxes = await jmapClient.getMailboxes(accountId)
-    await db.transaction('rw', db.mailboxes, async () => {
-      await db.mailboxes.where('_userId').equals(userId).delete()
-      await db.mailboxes.bulkPut(mailboxes.map((mb) => ({ ...mb, _userId: userId })))
-    })
+    // Persisting is best-effort — return the server's mailboxes regardless so
+    // the sidebar still populates when the store is broken.
+    await this.safeWrite(() =>
+      db.transaction('rw', db.mailboxes, async () => {
+        await db.mailboxes.where('_userId').equals(userId).delete()
+        await db.mailboxes.bulkPut(mailboxes.map((mb) => ({ ...mb, _userId: userId })))
+      })
+    )
     return mailboxes
   }
 
@@ -536,7 +634,11 @@ export class SyncManager {
    //    no auth cookie either — so it just 401-loops forever. (Verified: header
    //    auth streams fine, ?access_token= returns 401.)
    // Both rely on react-query's 60s polling + pull-to-refresh instead.
-   console.log('[Sync] Push sync unavailable (EventSource cannot send auth); using polling')
+   // Log once per session, not on every account switch.
+   if (import.meta.env.DEV && !SyncManager.pushNoticeLogged) {
+     SyncManager.pushNoticeLogged = true
+     console.log('[Sync] Push sync unavailable (EventSource cannot send auth); using polling')
+   }
    return
 
    // eslint-disable-next-line no-unreachable

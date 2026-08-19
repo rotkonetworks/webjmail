@@ -51,6 +51,12 @@ function removeWebAccount(name: string) {
   saveWebAccounts(loadWebAccounts().filter((a) => a.name !== name))
 }
 
+// Warm session cache (web): account name → its restored JMAP session. Switching
+// to a cached account is instant (no network round-trip). Kept out of the
+// persisted store — sessions are large and ephemeral. Desktop sessions live in
+// Rust, so this only accelerates the browser build.
+const sessionCache = new Map<string, JMAPSession>()
+
 interface AuthState {
   isAuthenticated: boolean
   session: JMAPSession | null
@@ -103,6 +109,21 @@ export const useAuthStore = create<AuthState>()(
             accounts: web.map((a) => ({ name: a.name, server: a.server, username: a.username })),
             activeAccount: active,
           })
+          // Seed the cache with the live session, then warm the rest in the
+          // background so the first switch to any account is instant.
+          const live = get().session
+          if (active && live) sessionCache.set(active, live)
+          for (const a of web) {
+            if (a.name === active || sessionCache.has(a.name)) continue
+            jmapClient
+              .restoreSession(a.server, a.token)
+              .then((s) => {
+                if (s) sessionCache.set(a.name, s)
+              })
+              .catch(() => {
+                /* preload is best-effort; a failed one just falls back to a live switch */
+              })
+          }
           return
         }
         try {
@@ -123,6 +144,29 @@ export const useAuthStore = create<AuthState>()(
         // account context silently — no toast, and DON'T reset the
         // mailbox/search selection, so the unified view stays put. Reads,
         // replies, and mark-as-read then use the correct account automatically.
+        // Fast path (web): if we already have a warm session for this account,
+        // swap it in immediately — no spinner, no network wait.
+        const warm = !isTauri ? sessionCache.get(name) : undefined
+        if (warm) {
+          const acct = loadWebAccounts().find((a) => a.name === name)
+          if (acct) {
+            if (!quiet) {
+              useMailStore.getState().selectMailbox(null)
+              useSearchStore.getState().setQuery('')
+            }
+            set({
+              session: warm,
+              sessionInfo: { server: acct.server, username: acct.username, token: acct.token },
+              activeAccount: name,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            })
+            if (!quiet) toast.success(`Switched to ${name}`)
+            return
+          }
+        }
+
         if (!quiet) set({ isLoading: true, error: null })
         try {
           let session
@@ -134,16 +178,22 @@ export const useAuthStore = create<AuthState>()(
             session = await jmapClient.restoreSession(acct.server, acct.token)
             set({ sessionInfo: { server: acct.server, username: acct.username, token: acct.token } })
           }
+          // A null/empty session means the switch didn't actually authenticate.
+          // Fail loudly instead of silently bouncing back to the old account.
+          if (!session) throw new Error('the account did not authenticate (check its password)')
           if (!quiet) {
             useMailStore.getState().selectMailbox(null)
             useSearchStore.getState().setQuery('')
           }
+          if (!isTauri) sessionCache.set(name, session)
           set({ session, activeAccount: name, isAuthenticated: true, isLoading: false })
           if (!quiet) toast.success(`Switched to ${name}`)
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to switch account'
+          // Tauri `invoke` rejects with a plain string — keep that detail.
+          const message =
+            error instanceof Error ? error.message : typeof error === 'string' ? error : 'Failed to switch account'
           set({ isLoading: false, error: message })
-          toast.error(`Couldn't switch to ${name}: ${message}`)
+          toast.error(`Couldn't switch to ${name}: ${message}`, 8000)
         }
       },
 
@@ -297,6 +347,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           await jmapClient.removeAccount(name)
           if (!isTauri) removeWebAccount(name)
+          sessionCache.delete(name)
           const wasActive = get().activeAccount === name
           await get().loadAccounts()
           if (wasActive) {
@@ -323,6 +374,7 @@ export const useAuthStore = create<AuthState>()(
         // Clear the JMAP client session (also clears the Rust-side token in Tauri)
         void jmapClient.logout()
         if (!isTauri) saveWebAccounts([])
+        sessionCache.clear()
 
         set({
           isAuthenticated: false,

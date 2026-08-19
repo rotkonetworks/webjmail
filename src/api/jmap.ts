@@ -983,6 +983,9 @@ export class JMAPClient {
   // actually list calendars? Result is logged to the in-app console so we can
   // decide JMAP-vs-CalDAV without guessing. Safe/no-op if unsupported.
   async probeCalendars(): Promise<void> {
+    // Diagnostic only — never in production/desktop builds, where it just spams
+    // the console on every account switch. Calendar-vs-CalDAV is settled.
+    if (!import.meta.env.DEV) return
     const s = this.session
     if (!s) {
       console.warn('[Calendar probe] no session yet')
