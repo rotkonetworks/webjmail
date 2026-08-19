@@ -2,6 +2,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useSendEmail, usePrimaryAccountId } from '../../hooks'
+import { useContacts } from '../../hooks/useContacts'
+import { RecipientInput } from './RecipientInput'
 import { useDefaultIdentity } from '../../hooks/useIdentities'
 import { jmapClient } from '../../api/jmap'
 import { config } from '../../config'
@@ -62,6 +64,7 @@ export function InlineComposer({
   const session = useAuthStore((state) => state.session)
   const accountId = usePrimaryAccountId()
   const sendEmail = useSendEmail()
+  const contacts = useContacts()
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [localAttachments, setLocalAttachments] = useState<
@@ -445,11 +448,11 @@ export function InlineComposer({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <label className="text-xs font-medium text-[var(--text-secondary)] w-12">To:</label>
-            <input
-              type="text"
+            <RecipientInput
               value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="flex-1 text-sm bg-transparent border-b border-[var(--border-color)] focus:border-[var(--primary-color)] outline-none py-1"
+              onChange={setTo}
+              contacts={contacts}
+              className="w-full text-sm bg-transparent border-b border-[var(--border-color)] focus:border-[var(--primary-color)] outline-none py-1"
               placeholder="recipient@example.com"
               disabled={isSending}
             />
@@ -472,11 +475,11 @@ export function InlineComposer({
         {showCc && (
           <div className="flex items-center gap-2">
             <label className="text-xs font-medium text-[var(--text-secondary)] w-12">Cc:</label>
-            <input
-              type="text"
+            <RecipientInput
               value={cc}
-              onChange={(e) => setCc(e.target.value)}
-              className="flex-1 text-sm bg-transparent border-b border-[var(--border-color)] focus:border-[var(--primary-color)] outline-none py-1"
+              onChange={setCc}
+              contacts={contacts}
+              className="w-full text-sm bg-transparent border-b border-[var(--border-color)] focus:border-[var(--primary-color)] outline-none py-1"
               placeholder="cc@example.com"
               disabled={isSending}
             />
@@ -487,11 +490,11 @@ export function InlineComposer({
         {showBcc && (
           <div className="flex items-center gap-2">
             <label className="text-xs font-medium text-[var(--text-secondary)] w-12">Bcc:</label>
-            <input
-              type="text"
+            <RecipientInput
               value={bcc}
-              onChange={(e) => setBcc(e.target.value)}
-              className="flex-1 text-sm bg-transparent border-b border-[var(--border-color)] focus:border-[var(--primary-color)] outline-none py-1"
+              onChange={setBcc}
+              contacts={contacts}
+              className="w-full text-sm bg-transparent border-b border-[var(--border-color)] focus:border-[var(--primary-color)] outline-none py-1"
               placeholder="bcc@example.com"
               disabled={isSending}
             />

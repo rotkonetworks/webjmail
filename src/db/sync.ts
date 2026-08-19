@@ -551,6 +551,37 @@ export class SyncManager {
     )
   }
 
+  /**
+   * Address book derived from mail already in the local cache: every unique
+   * from/to/cc/replyTo address the user has corresponded with, ranked by how
+   * often it appears (frequency). Powers recipient autocomplete. Best-effort —
+   * returns [] if the store is unavailable.
+   */
+  async getContacts(userId: string): Promise<Array<{ email: string; name?: string; n: number }>> {
+    return this.safeRead(async () => {
+      const rows = await db.emails.where('_userId').equals(userId).toArray()
+      const map = new Map<string, { email: string; name?: string; n: number }>()
+      for (const e of rows) {
+        const lists = [e.from, e.to, e.cc, e.replyTo]
+        for (const list of lists) {
+          for (const a of list || []) {
+            const email = a?.email?.trim()
+            if (!email || !email.includes('@')) continue
+            const key = email.toLowerCase()
+            const ex = map.get(key)
+            if (ex) {
+              ex.n++
+              if (!ex.name && a.name) ex.name = a.name
+            } else {
+              map.set(key, { email, name: a.name || undefined, n: 1 })
+            }
+          }
+        }
+      }
+      return [...map.values()].sort((x, y) => y.n - x.n)
+    }, [])
+  }
+
   /** Mailboxes cached locally for this user (instant sidebar on launch). */
   async getCachedMailboxes(userId: string) {
     return this.safeRead(async () => {
