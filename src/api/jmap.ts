@@ -16,10 +16,32 @@ export class JMAPClient {
   private accessToken: string = ''
   private baseUrl: string = ''
 
+  // Turn a raw session response into a JMAPSession, or throw a CLEAR error.
+  // A server that's unreachable/misconfigured (or a reverse proxy during an
+  // outage) commonly returns an HTML page; JSON.parse on that yields the opaque
+  // "Unrecognized token '<'". Detect that and say what actually happened so the
+  // user isn't told about JSON when the real problem is the server.
+  private parseSessionText(responseText: string): JMAPSession {
+    const trimmed = (responseText || '').trimStart()
+    if (!trimmed) {
+      throw new Error('The mail server returned an empty response — it may be unreachable. Try again in a moment.')
+    }
+    if (trimmed[0] === '<') {
+      throw new Error(
+        'The mail server returned a web page instead of a JMAP response — it may be unreachable or the address is wrong. Please try again.'
+      )
+    }
+    try {
+      return JSON.parse(responseText)
+    } catch {
+      throw new Error('The mail server sent an unreadable response — it may be temporarily unavailable. Try again.')
+    }
+  }
+
   // Parse a raw JMAP session response, apply the legacy :8080 URL fixups, and
   // store it. Shared by the web and Tauri auth paths.
   private applySession(responseText: string): JMAPSession {
-    const session: JMAPSession = JSON.parse(responseText)
+    const session: JMAPSession = this.parseSessionText(responseText)
 
     if (session?.apiUrl?.includes(':8080')) {
       const fix = (u?: string) =>
@@ -148,7 +170,7 @@ export class JMAPClient {
       if (import.meta.env.DEV) debug('[Auth] Raw session response:', responseText)
 
       try {
-        this.session = JSON.parse(responseText)
+        this.session = this.parseSessionText(responseText)
 
         if (window.location.protocol === 'https:' && this.session?.apiUrl?.startsWith('http://')) {
           const fixUrl = (url: string): string => {
@@ -618,7 +640,7 @@ export class JMAPClient {
     const cached = this.accountSessions.get(name)
     if (cached) return cached
     const text = await invoke<string>('account_session', { name })
-    const session = JSON.parse(text) as JMAPSession
+    const session = this.parseSessionText(text)
     this.accountSessions.set(name, session)
     return session
   }
