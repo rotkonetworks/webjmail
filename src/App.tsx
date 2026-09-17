@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './stores/authStore'
+import { useUIStore } from './stores/uiStore'
 import { Login } from './pages/Login'
 import { Layout } from './components/Layout/Layout'
 import { Toaster } from './components/Layout/Toaster'
@@ -21,8 +22,20 @@ const queryClient = new QueryClient({
 function AppContent() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const isLoading = useAuthStore((state) => state.isLoading)
+  const theme = useUIStore((state) => state.theme)
+  const font = useUIStore((state) => state.font)
   const [isInitializing, setIsInitializing] = useState(true)
   const [onboarded, setOnboarded] = useState(hasOnboarded)
+
+  // Apply theme/font at the top level so the pre-auth screens (loading, login,
+  // onboarding) are themed too — Layout only mounts once authenticated, so
+  // without this those screens had no data-theme and relied on the bare :root
+  // default (see index.css).
+  useEffect(() => {
+    if (theme === 'system') document.documentElement.removeAttribute('data-theme')
+    else document.documentElement.setAttribute('data-theme', theme)
+    document.documentElement.setAttribute('data-font', font)
+  }, [theme, font])
 
   useEffect(() => {
     useAuthStore.getState().restoreSession().finally(() => {

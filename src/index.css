@@ -12,6 +12,34 @@
   --sidebar-max-width: 400px;
   --message-list-min-width: 250px;
   --message-list-max-width: 600px;
+
+  /* Default (light) palette on bare :root so the theme variables ALWAYS exist —
+     even before a data-theme is applied (e.g. the pre-auth login/onboarding
+     screens, which mount before Layout sets data-theme) and even when the
+     WebView reports no prefers-color-scheme match. Without this, --primary-color
+     was undefined there and the Sign-in button rendered transparent (invisible
+     white-on-white). [data-theme] and the prefers-color-scheme blocks override. */
+  color-scheme: light;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e8e8e8;
+  --bg-elevated: #eeeeee;
+  --text-primary: #000000;
+  --text-secondary: #5e5e5e;
+  --text-tertiary: #999999;
+  --border-color: #dce2e9;
+  --on-primary: #ffffff;
+  --on-accent: #14202b;
+  --accent-pink: #d1477a;
+  --accent-orange: #e6825a;
+  --accent-yellow: #d4c441;
+  --accent-green: #85b862;
+  --accent-cyan: #5cb3c4;
+  --accent-blue: #5cb3c4;
+  --primary-color: #d1477a;
+  --primary-hover: #b83d68;
+  --compose-btn: #d1477a;
+  --unread-dot: #5cb3c4;
 }
 
 /* Monokai Dark Theme (default) */
