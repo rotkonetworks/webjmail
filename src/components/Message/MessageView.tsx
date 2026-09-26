@@ -16,6 +16,7 @@ import { format } from 'date-fns'
 import { jmapClient } from '../../api/jmap'
 import { isTauri } from '../../lib/tauri'
 import { toast, useToastStore } from '../../stores/toastStore'
+import { useIcsImportStore } from '../../stores/icsImportStore'
 
 // Force every link in rendered email HTML to open in a new tab/window instead
 // of navigating the app frame away (which would destroy the SPA in the browser
@@ -340,6 +341,22 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
       }
       return next
     })
+  }
+
+  const isIcsAttachment = (a: any) =>
+    /^(text\/calendar|application\/ics)\b/i.test(a.type || '') || /\.(ics|ical|ifb|icalendar)$/i.test(a.name || '')
+
+  // Open an .ics attachment in the calendar import dialog.
+  const handleOpenIcs = async (attachment: any) => {
+    if (!accountId || !attachment.blobId) return
+    const name = attachment.name || 'invite.ics'
+    try {
+      const url = jmapClient.getBlobUrl(accountId, attachment.blobId, 'text/calendar', name)
+      const text = await jmapClient.fetchBlobText(url)
+      useIcsImportStore.getState().open({ text, source: name })
+    } catch (err) {
+      toast.error(`Could not open ${name}: ${err instanceof Error ? err.message : err}`)
+    }
   }
 
   const handleDownloadAttachment = async (attachment: any) => {
@@ -788,26 +805,48 @@ ${isCurrent ? 'bg-[var(--primary-color)] text-[var(--on-primary)]' : 'bg-[var(--
                             Attachments ({threadEmail.attachments.length})
                           </h4>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
-                            {threadEmail.attachments.map((attachment: any) => (
-                              <button
-                                key={attachment.partId}
-                                onClick={() => handleDownloadAttachment(attachment)}
-                                className="flex items-center gap-3 p-4 bg-[var(--bg-tertiary)] rounded-lg hover:bg-[var(--hover-bg)] text-left group"
-                              >
+                            {threadEmail.attachments.map((attachment: any) => {
+                              const ics = isIcsAttachment(attachment)
+                              return (
                                 <div
-                                  className={`${getAttachmentIcon(attachment.type || '')} text-2xl text-[var(--text-secondary)] group-hover:text-[var(--primary-color)]`}
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate text-[var(--text-primary)]">
-                                    {attachment.name || 'Untitled'}
-                                  </p>
-                                  <p className="text-xs text-[var(--text-tertiary)]">
-                                    {formatFileSize(attachment.size)}
-                                  </p>
+                                  key={attachment.partId}
+                                  className="flex items-stretch bg-[var(--bg-tertiary)] rounded-lg"
+                                >
+                                  <button
+                                    onClick={() =>
+                                      ics ? handleOpenIcs(attachment) : handleDownloadAttachment(attachment)
+                                    }
+                                    title={ics ? 'Add to calendar' : 'Download'}
+                                    className="flex-1 min-w-0 flex items-center gap-3 p-4 rounded-lg hover:bg-[var(--hover-bg)] text-left group"
+                                  >
+                                    <div
+                                      className={`${getAttachmentIcon(attachment.type || '')} text-2xl text-[var(--text-secondary)] group-hover:text-[var(--primary-color)]`}
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate text-[var(--text-primary)]">
+                                        {attachment.name || 'Untitled'}
+                                      </p>
+                                      <p className="text-xs text-[var(--text-tertiary)]">
+                                        {ics ? 'Add to calendar · ' : ''}
+                                        {formatFileSize(attachment.size)}
+                                      </p>
+                                    </div>
+                                    <div
+                                      className={`${ics ? 'i-lucide:calendar-plus' : 'i-lucide:download'} text-[var(--text-tertiary)] group-hover:text-[var(--primary-color)]`}
+                                    />
+                                  </button>
+                                  {ics && (
+                                    <button
+                                      onClick={() => handleDownloadAttachment(attachment)}
+                                      title="Download"
+                                      className="px-3 rounded-lg hover:bg-[var(--hover-bg)] text-[var(--text-tertiary)] hover:text-[var(--primary-color)]"
+                                    >
+                                      <div className="i-lucide:download" />
+                                    </button>
+                                  )}
                                 </div>
-                                <div className="i-lucide:download text-[var(--text-tertiary)] group-hover:text-[var(--primary-color)]" />
-                              </button>
-                            ))}
+                              )
+                            })}
                           </div>
                         </div>
                       )}

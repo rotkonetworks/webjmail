@@ -918,6 +918,18 @@ export class JMAPClient {
     return resp.blob()
   }
 
+  // Fetch a (small) blob as text — used to read .ics attachments for import.
+  // Desktop goes through Rust (auth + CORS); web uses the authed fetch.
+  async fetchBlobText(url: string): Promise<string> {
+    if (isTauri) {
+      const r = await invoke<{ contentType: string; data: string }>('jmap_download', { url })
+      const bin = atob(r.data)
+      const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
+      return new TextDecoder().decode(bytes)
+    }
+    return (await this.fetchBlob(url)).text()
+  }
+
   // Upload a file as a JMAP blob (for attachments). Desktop routes the bytes
   // through Rust (CORS + auth); web POSTs directly via the proxy.
   async uploadBlob(
