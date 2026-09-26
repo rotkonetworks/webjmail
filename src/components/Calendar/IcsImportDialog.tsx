@@ -120,7 +120,7 @@ export function IcsImportDialog() {
         <div className="p-4 space-y-3 overflow-y-auto">
           {!calendarsAvailable ? (
             <p className="text-sm text-[var(--text-secondary)]">
-              This account's server doesn't offer calendars.
+              This account&apos;s server doesn&apos;t offer calendars.
             </p>
           ) : parsed.events.length === 0 ? (
             <p className="text-sm text-[var(--text-secondary)]">No events found in this file.</p>
@@ -155,7 +155,7 @@ export function IcsImportDialog() {
                   )}
                   {ev.tzFallback && (
                     <p className="text-xs text-amber-500">
-                      Unknown time zone "{ev.tzFallback}", using {displayTz}
+                      Unknown time zone &quot;{ev.tzFallback}&quot;, using {displayTz}
                     </p>
                   )}
                   {rows[i] && (

@@ -5,6 +5,7 @@ import { ErrorBoundary } from '../ErrorBoundary'
 import { CalendarView } from '../Calendar/CalendarView'
 import { IcsImportDialog } from '../Calendar/IcsImportDialog'
 import { useIcsFileOpen } from '../../hooks/useIcsFileOpen'
+import { useAlerts } from '../../hooks/useAlerts'
 import { useCalendarStore } from '../../stores/calendarStore'
 import { MessageList } from '../Message/MessageList'
 import { UnifiedInbox } from '../Message/UnifiedInbox'
@@ -60,6 +61,7 @@ export function Layout() {
   const isMobile = useDeviceType()
   const accountId = usePrimaryAccountId()
   useIcsFileOpen()
+  useAlerts()
 
   // The single AI-editable draft (shared with the assistant via draftStore).
   const draftOpen = useDraftStore((s) => s.open)

@@ -32,7 +32,7 @@ interface Prop {
 // Unfold continuation lines (CRLF followed by space/tab) and split.
 function unfold(text: string): string[] {
   return text
-    .replace(/^﻿/, '')
+    .replace(/^\uFEFF/, '')
     .replace(/\r\n|\r/g, '\n')
     .replace(/\n[ \t]/g, '')
     .split('\n')

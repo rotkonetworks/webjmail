@@ -670,21 +670,24 @@ export class JMAPClient {
   // Two requests: locate the inbox mailbox by role, then get its unread count +
   // query/get its emails (a back-reference into a filter isn't valid JMAP, so
   // the id is resolved first).
+  // `accountName` null = the active session (works on the web build too).
   async getAccountInbox(
     session: JMAPSession,
-    accountName: string,
+    accountName: string | null,
     limit = 50
   ): Promise<{ emails: Email[]; inboxId: string | null; unread: number }> {
     const accountId = session.primaryAccounts?.['urn:ietf:params:jmap:mail']
     if (!accountId) return { emails: [], inboxId: null, unread: 0 }
+    const call = (calls: Array<[string, any, string]>) =>
+      accountName === null ? this.request(calls) : this.requestAs(session, accountName, calls)
 
-    const mbResp = await this.requestAs(session, accountName, [
+    const mbResp = await call([
       ['Mailbox/query', { accountId, filter: { role: 'inbox' } }, 'm'],
     ])
     const inboxId = mbResp.find(([m]) => m === 'Mailbox/query')?.[1]?.ids?.[0] ?? null
     if (!inboxId) return { emails: [], inboxId: null, unread: 0 }
 
-    const responses = await this.requestAs(session, accountName, [
+    const responses = await call([
       ['Mailbox/get', { accountId, ids: [inboxId], properties: ['unreadEmails'] }, 'mb'],
       [
         'Email/query',

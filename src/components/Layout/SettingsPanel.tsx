@@ -3,6 +3,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useAiProviderStore, OPENAI_PRESETS } from '../../stores/aiProviderStore'
 import { isTauri } from '../../lib/tauri'
+import { AlertSettings } from './AlertSettings'
 
 interface SettingsPanelProps {
   isOpen: boolean
@@ -338,6 +339,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </div>
             </div>
             
+            <AlertSettings />
+
             {/* AI Assistant */}
             <div>
               <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-3">Assistant</h3>
