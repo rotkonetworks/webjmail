@@ -137,6 +137,8 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
   const addEmails = useMailStore((state) => state.addEmails)
   const imageLoadingMode = useUIStore((state) => state.imageLoadingMode)
   const htmlRichness = useUIStore((state) => state.htmlRichness)
+  const mailColors = useUIStore((state) => state.mailColors)
+  const setMailColors = useUIStore((state) => state.setMailColors)
   const markAsRead = useMarkAsRead()
   const flagEmail = useFlagEmail()
   const deleteEmail = useDeleteEmail()
@@ -591,8 +593,26 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
               </button>
             </div>
           )}
+          {htmlRichness === 'rich' && (
+            <div className="flex justify-end mb-2">
+              <button
+                onClick={() => setMailColors(mailColors === 'theme' ? 'original' : 'theme')}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--hover-bg)]"
+                title={
+                  mailColors === 'theme'
+                    ? "Show the sender's original colors"
+                    : 'Recolor this mail with the app theme'
+                }
+              >
+                <div className={mailColors === 'theme' ? 'i-lucide:palette' : 'i-lucide:contrast'} />
+                {mailColors === 'theme' ? 'Original colors' : 'Theme colors'}
+              </button>
+            </div>
+          )}
           <div
-            className={`email-content ${htmlRichness === 'minimal' ? 'email-minimal' : 'email-html'}`}
+            className={`email-content ${
+              htmlRichness === 'minimal' ? 'email-minimal' : mailColors === 'theme' ? 'email-themed' : 'email-html'
+            }`}
             dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
           />
         </>
@@ -726,7 +746,7 @@ ${isCurrent ? 'bg-[var(--primary-color)] text-[var(--on-primary)]' : 'bg-[var(--
                       </div>
                       <div className="flex items-center gap-2 text-xs md:text-sm text-[var(--text-tertiary)]">
                         <span>
-                          {format(new Date(threadEmail.receivedAt), isMobile ? 'MMM d' : 'MMM d, yyyy at HH:mm')}
+                          {format(new Date(threadEmail.receivedAt), isMobile ? 'MMM d' : "MMM d, yyyy 'at' HH:mm")}
                         </span>
                         <div
                           className={`i-lucide:chevron-down ${isExpanded ? 'rotate-180' : ''}`}

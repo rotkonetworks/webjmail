@@ -8,6 +8,9 @@ type Font = 'system' | 'mono' | 'serif'
 type ComposerMode = 'inline'
 type ImageLoadingMode = 'always' | 'ask' | 'never'
 type HtmlRichness = 'minimal' | 'rich'
+// 'original' keeps the sender's colors (on a light page in dark themes);
+// 'theme' overrides them with the app palette.
+type MailColors = 'original' | 'theme'
 
 interface UIState {
   sidebarOpen: boolean
@@ -22,6 +25,7 @@ interface UIState {
   composerMode: ComposerMode
   imageLoadingMode: ImageLoadingMode
   htmlRichness: HtmlRichness
+  mailColors: MailColors
   minimizedComposers: string[] // track minimized composer IDs
   
   toggleSidebar: () => void
@@ -36,6 +40,7 @@ interface UIState {
   setFont: (font: Font) => void
   setImageLoadingMode: (mode: ImageLoadingMode) => void
   setHtmlRichness: (richness: HtmlRichness) => void
+  setMailColors: (mailColors: MailColors) => void
   addMinimizedComposer: (id: string) => void
   removeMinimizedComposer: (id: string) => void
   clearMinimizedComposers: () => void
@@ -56,6 +61,7 @@ export const useUIStore = create<UIState>()(
       composerMode: 'inline', // Only inline mode supported
       imageLoadingMode: 'ask', // Default to privacy-conscious mode
       htmlRichness: 'rich', // Default to rich HTML
+      mailColors: 'original',
       minimizedComposers: [],
       
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
@@ -70,6 +76,7 @@ export const useUIStore = create<UIState>()(
       setFont: (font) => set({ font }),
       setImageLoadingMode: (imageLoadingMode) => set({ imageLoadingMode }),
       setHtmlRichness: (htmlRichness) => set({ htmlRichness }),
+      setMailColors: (mailColors) => set({ mailColors }),
       addMinimizedComposer: (id) => set((state) => ({
         minimizedComposers: [...state.minimizedComposers, id]
       })),
@@ -90,6 +97,7 @@ export const useUIStore = create<UIState>()(
         font: state.font,
         imageLoadingMode: state.imageLoadingMode,
         htmlRichness: state.htmlRichness,
+        mailColors: state.mailColors,
       }),
     }
   )

@@ -529,6 +529,30 @@ input[type='radio']:checked::after {
   }
 }
 
+/* "Theme colors" mode: override the sender's palette so mails that assume a
+   white page (per-paragraph white backgrounds, hard-coded dark text) follow the
+   app theme. !important beats the sender's inline styles; images and
+   background-images are left alone. */
+.email-themed,
+.email-themed * {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+.email-themed a,
+.email-themed a * {
+  color: var(--accent-blue) !important;
+  text-decoration: underline;
+}
+/* Our own blocked-image placeholder keeps its box and button. */
+.email-themed .blocked-image-wrapper {
+  background-color: var(--bg-tertiary) !important;
+}
+.email-themed .load-single-image {
+  background-color: var(--primary-color) !important;
+  color: var(--on-primary) !important;
+}
+
 /* Prose styles for email content */
 .prose {
   color: var(--text-primary);
