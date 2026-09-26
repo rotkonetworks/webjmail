@@ -258,7 +258,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
           <div className="flex items-center gap-2 p-3 border-b border-[var(--border-color)]">
             <button
               onClick={() => (onClose ? onClose() : selectEmail(null))}
-              className="p-2 hover:bg-white/10 rounded-lg flex items-center gap-1 text-sm"
+              className="p-2 hover:bg-[var(--hover-bg)] rounded-lg flex items-center gap-1 text-sm"
             >
               <div className="i-lucide:arrow-left" /> Back
             </button>
@@ -560,7 +560,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
             btn.className = 'load-single-image'
             btn.setAttribute('data-index', index.toString())
             btn.style.cssText =
-              'padding:0.25rem 0.75rem;background:var(--primary-color);color:white;border:none;border-radius:4px;font-size:0.75rem;cursor:pointer;'
+              'padding:0.25rem 0.75rem;background:var(--primary-color);color:var(--on-primary);border:none;border-radius:4px;font-size:0.75rem;cursor:pointer;'
             btn.textContent = 'Load image'
 
             box.appendChild(iconEl)
@@ -592,7 +592,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
             </div>
           )}
           <div
-            className={`email-content ${htmlRichness === 'minimal' ? 'email-minimal' : ''}`}
+            className={`email-content ${htmlRichness === 'minimal' ? 'email-minimal' : 'email-html'}`}
             dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
           />
         </>
@@ -621,7 +621,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
                   selectEmail(null)
                   onClose?.()
                 }}
-                className="p-2 hover:bg-white/10 rounded-lg flex-shrink-0"
+                className="p-2 hover:bg-[var(--hover-bg)] rounded-lg flex-shrink-0"
                 title="Back"
               >
                 <div className="i-lucide:arrow-left" />
@@ -641,21 +641,21 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
               <>
                 <button
                   onClick={() => handleReply('reply')}
-                  className="p-2 hover:bg-white/10 rounded-lg"
+                  className="p-2 hover:bg-[var(--hover-bg)] rounded-lg"
                   title="Reply"
                 >
                   <div className="i-lucide:reply" />
                 </button>
                 <button
                   onClick={() => handleReply('replyAll')}
-                  className="p-2 hover:bg-white/10 rounded-lg"
+                  className="p-2 hover:bg-[var(--hover-bg)] rounded-lg"
                   title="Reply All"
                 >
                   <div className="i-lucide:reply-all" />
                 </button>
                 <button
                   onClick={() => handleReply('forward')}
-                  className="p-2 hover:bg-white/10 rounded-lg"
+                  className="p-2 hover:bg-[var(--hover-bg)] rounded-lg"
                   title="Forward"
                 >
                   <div className="i-lucide:forward" />
@@ -665,7 +665,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
             )}
             <button
               onClick={handleFlag}
-              className="p-2 hover:bg-white/10 rounded-lg"
+              className="p-2 hover:bg-[var(--hover-bg)] rounded-lg"
               title={email.keywords.$flagged ? 'Unflag' : 'Flag'}
             >
               <div
@@ -674,7 +674,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
             </button>
             <button
               onClick={handleDelete}
-              className="p-2 hover:bg-white/10 rounded-lg"
+              className="p-2 hover:bg-[var(--hover-bg)] rounded-lg"
               title="Delete"
             >
               <div className="i-lucide:trash-2" />
@@ -710,7 +710,7 @@ ${isCurrent ? 'ring-2 ring-[var(--primary-color)]' : ''}
                         <div
                           className={`
 w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-medium flex-shrink-0
-${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
+${isCurrent ? 'bg-[var(--primary-color)] text-[var(--on-primary)]' : 'bg-[var(--accent-cyan)] text-[var(--on-accent)]'}
 `}
                         >
                           {(sender?.name || sender?.email || 'U').charAt(0).toUpperCase()}
@@ -772,7 +772,7 @@ ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
                               <button
                                 key={attachment.partId}
                                 onClick={() => handleDownloadAttachment(attachment)}
-                                className="flex items-center gap-3 p-4 bg-[var(--bg-tertiary)] rounded-lg hover:bg-white/10 text-left group"
+                                className="flex items-center gap-3 p-4 bg-[var(--bg-tertiary)] rounded-lg hover:bg-[var(--hover-bg)] text-left group"
                               >
                                 <div
                                   className={`${getAttachmentIcon(attachment.type || '')} text-2xl text-[var(--text-secondary)] group-hover:text-[var(--primary-color)]`}
@@ -804,21 +804,21 @@ ${isCurrent ? 'bg-[var(--primary-color)]' : 'bg-[var(--accent-cyan)]'}
           <div className="border-t border-[var(--border-color)] p-2 flex justify-around">
             <button
               onClick={() => handleReply('reply')}
-              className="p-3 hover:bg-white/10 rounded-lg flex flex-col items-center gap-1"
+              className="p-3 hover:bg-[var(--hover-bg)] rounded-lg flex flex-col items-center gap-1"
             >
               <div className="i-lucide:reply" />
               <span className="text-xs">Reply</span>
             </button>
             <button
               onClick={() => handleReply('replyAll')}
-              className="p-3 hover:bg-white/10 rounded-lg flex flex-col items-center gap-1"
+              className="p-3 hover:bg-[var(--hover-bg)] rounded-lg flex flex-col items-center gap-1"
             >
               <div className="i-lucide:reply-all" />
               <span className="text-xs">Reply All</span>
             </button>
             <button
               onClick={() => handleReply('forward')}
-              className="p-3 hover:bg-white/10 rounded-lg flex flex-col items-center gap-1"
+              className="p-3 hover:bg-[var(--hover-bg)] rounded-lg flex flex-col items-center gap-1"
             >
               <div className="i-lucide:forward" />
               <span className="text-xs">Forward</span>

@@ -15,6 +15,23 @@ export default defineConfig({
     }),
     presetTypography(),
   ],
+  rules: [
+    // presetUno silently DROPS the `/NN` opacity on arbitrary var() colors:
+    // `bg-[var(--primary-color)]/20` compiled to a SOLID primary fill, so the
+    // "tinted" selected-folder / checked-row / banner backgrounds became solid
+    // pink/cyan/orange blocks with same-colored or light text on them. Mix the
+    // variable with transparent instead so the tint actually applies.
+    [
+      /^(bg|border|text|ring)-\[var\((--[\w-]+)\)\]\/(\d+)$/,
+      ([, kind, v, pct]) => {
+        const c = `color-mix(in srgb, var(${v}) ${pct}%, transparent)`
+        if (kind === 'bg') return { 'background-color': c }
+        if (kind === 'border') return { 'border-color': c }
+        if (kind === 'text') return { color: c }
+        return { '--un-ring-color': c }
+      },
+    ],
+  ],
   theme: {
     colors: {
       primary: {

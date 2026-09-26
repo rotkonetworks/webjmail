@@ -70,7 +70,7 @@ export function AccountSwitcher({ compact = false }: { compact?: boolean }) {
             return (
               <div
                 key={a.name}
-                className="group w-full px-3 py-2 flex items-center gap-3 hover:bg-white/10 transition-colors"
+                className="group w-full px-3 py-2 flex items-center gap-3 hover:bg-[var(--hover-bg)] transition-colors"
               >
                 <button
                   onClick={() => {
@@ -112,7 +112,7 @@ export function AccountSwitcher({ compact = false }: { compact?: boolean }) {
                 setAdding(true)
                 setOpen(false)
               }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left hover:bg-white/10 transition-colors text-sm text-[var(--text-primary)]"
+              className="w-full px-3 py-2 flex items-center gap-3 text-left hover:bg-[var(--hover-bg)] transition-colors text-sm text-[var(--text-primary)]"
             >
               <div className="w-7 h-7 rounded-full border border-dashed border-[var(--border-color)] flex items-center justify-center">
                 <div className="i-lucide:plus text-[var(--text-secondary)]" />
@@ -124,7 +124,7 @@ export function AccountSwitcher({ compact = false }: { compact?: boolean }) {
                 setOpen(false)
                 logout()
               }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left hover:bg-white/10 transition-colors text-sm text-[var(--text-secondary)] hover:text-red-400"
+              className="w-full px-3 py-2 flex items-center gap-3 text-left hover:bg-[var(--hover-bg)] transition-colors text-sm text-[var(--text-secondary)] hover:text-red-400"
               title="Sign out of all accounts on this device"
             >
               <div className="w-7 h-7 rounded-full flex items-center justify-center">

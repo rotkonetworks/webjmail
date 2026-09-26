@@ -468,7 +468,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
               )
             )}
             <button
-              className="px-2 py-1 text-xs rounded hover:bg-white/10 transition-colors disabled:opacity-50 flex items-center gap-1"
+              className="px-2 py-1 text-xs rounded hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 flex items-center gap-1"
               onClick={handleBulkRead}
               disabled={bulkBusy}
               title="Mark as read"
@@ -476,7 +476,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
               <div className="i-lucide:mail-open" /> Read
             </button>
             <button
-              className="px-2 py-1 text-xs rounded hover:bg-white/10 transition-colors disabled:opacity-50 flex items-center gap-1"
+              className="px-2 py-1 text-xs rounded hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 flex items-center gap-1"
               onClick={handleBulkUnread}
               disabled={bulkBusy}
               title="Mark as unread"
@@ -485,7 +485,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
             </button>
             <div className="relative">
               <button
-                className={`px-2 py-1 text-xs rounded hover:bg-white/10 transition-colors disabled:opacity-50 flex items-center gap-1 ${showMoveMenu ? 'bg-white/10' : ''}`}
+                className={`px-2 py-1 text-xs rounded hover:bg-[var(--hover-bg)] transition-colors disabled:opacity-50 flex items-center gap-1 ${showMoveMenu ? 'bg-[var(--hover-bg)]' : ''}`}
                 onClick={() => setShowMoveMenu((v) => !v)}
                 disabled={bulkBusy}
                 title="Move to folder"
@@ -524,7 +524,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
               <div className="i-lucide:trash-2" /> Delete
             </button>
             <button
-              className="p-1 ml-1 rounded hover:bg-white/10 transition-colors"
+              className="p-1 ml-1 rounded hover:bg-[var(--hover-bg)] transition-colors"
               onClick={() => setSelectedIds(new Set())}
               title="Clear selection"
             >
@@ -551,7 +551,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
           </span>
           <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
             <button
-              className="p-1 hover:bg-white/10 rounded transition-transform active:scale-90 disabled:opacity-70"
+              className="p-1 hover:bg-[var(--hover-bg)] rounded transition-transform active:scale-90 disabled:opacity-70"
               title="Refresh (⌘R)"
               onClick={doRefresh}
               disabled={refreshing}
@@ -619,7 +619,7 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
                     <span className={`
                       truncate text-sm
                       ${isUnread ? 'font-semibold' : 'font-medium'}
-                      ${isSelected ? 'text-white' : 'text-[var(--text-primary)]'}
+                      ${'text-[var(--text-primary)]'}
                     `}>
                       {senderName}
                     </span>
@@ -631,14 +631,14 @@ export const MessageList = memo(function MessageList({ viewMode = 'column', onSe
                   <div className={`
                     mb-0.5 truncate text-sm
                     ${isUnread ? 'font-medium' : ''}
-                    ${isSelected ? 'text-white' : 'text-[var(--text-primary)]'}
+                    ${'text-[var(--text-primary)]'}
                   `}>
                     {email.subject || '(no subject)'}
                   </div>
 
                   <div className={`
                     truncate text-sm
-                    ${isSelected ? 'text-white/70' : 'text-[var(--text-tertiary)]'}
+                    ${'text-[var(--text-tertiary)]'}
                   `}>
                     {email.preview || ''}
                   </div>

@@ -68,7 +68,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
         {/* Logo only */}
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-[var(--primary-color)] rounded-lg flex items-center justify-center">
-            <div className="i-lucide:mail text-white text-base" />
+            <div className="i-lucide:mail text-[var(--on-primary)] text-base" />
           </div>
           <span className="font-semibold">{config.appName}</span>
         </div>
@@ -78,7 +78,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
           <button
             onClick={handleManualRefresh}
             disabled={isRefreshing}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+            className="p-2 hover:bg-[var(--hover-bg)] rounded-lg transition-colors disabled:opacity-50"
             title="Refresh"
           >
             <div className={`i-lucide:refresh-cw text-sm ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -86,7 +86,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
 
           <button
             onClick={onCompose}
-            className="p-2 hover:bg-white/10 rounded-lg bg-[var(--primary-color)]"
+            className="p-2 rounded-lg bg-[var(--primary-color)] hover:bg-[var(--primary-hover)]"
           >
             <div className="i-lucide:edit-3 text-[var(--on-primary)] text-sm" />
           </button>
@@ -94,7 +94,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
           {onAgent && (
             <button
               onClick={onAgent}
-              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              className="p-2 hover:bg-[var(--hover-bg)] rounded-lg transition-colors"
               title="Assistant — chat with your mail"
             >
               <div className="i-lucide:sparkles text-sm" />
@@ -103,7 +103,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
 
           <AccountSwitcher compact />
 
-          <button onClick={onSettings} className="p-2 hover:bg-white/10 rounded-lg" title="Settings">
+          <button onClick={onSettings} className="p-2 hover:bg-[var(--hover-bg)] rounded-lg" title="Settings">
             <div className="i-lucide:settings text-sm" />
           </button>
         </div>
@@ -117,7 +117,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
       {/* Logo */}
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 bg-[var(--primary-color)] rounded-lg flex items-center justify-center">
-          <div className="i-lucide:mail text-white text-lg" />
+          <div className="i-lucide:mail text-[var(--on-primary)] text-lg" />
         </div>
         <span className="font-semibold text-lg">{config.appName}</span>
       </div>
@@ -137,7 +137,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
           {searchQuery && (
             <button
               onClick={handleClearSearch}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-[var(--hover-bg)] rounded"
             >
               <div className="i-lucide:x text-sm" />
             </button>
@@ -162,7 +162,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
         <button
           onClick={handleManualRefresh}
           disabled={isRefreshing}
-          className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+          className="p-2 hover:bg-[var(--hover-bg)] rounded-lg transition-colors disabled:opacity-50"
           title="Refresh emails (⌘R)"
         >
           <div className={`i-lucide:refresh-cw ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -181,7 +181,7 @@ export const Header = memo(function Header({ onCompose, onSettings, onAgent }: H
         {onAgent && (
           <button
             onClick={onAgent}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            className="p-2 hover:bg-[var(--hover-bg)] rounded-lg transition-colors"
             title="Assistant — chat with your mail"
           >
             <div className="i-lucide:sparkles" />

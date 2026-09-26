@@ -141,19 +141,19 @@ export function AgentChat({ accountId, onClose, narrow = false }: AgentChatProps
               setStatus('')
             }}
             disabled={busy || msgs.length === 0}
-            className="p-1 rounded hover:bg-white/10 disabled:opacity-40"
+            className="p-1 rounded hover:bg-[var(--hover-bg)] disabled:opacity-40"
             title="New chat (clears the current conversation)"
           >
             <div className="i-lucide:square-pen" />
           </button>
           <button
             onClick={() => setShowConfig((v) => !v)}
-            className={`p-1 rounded hover:bg-white/10 ${showConfig ? 'text-[var(--primary-color)]' : ''}`}
+            className={`p-1 rounded hover:bg-[var(--hover-bg)] ${showConfig ? 'text-[var(--primary-color)]' : ''}`}
             title="Provider settings"
           >
             <div className="i-lucide:settings-2" />
           </button>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded" title="Close">
+          <button onClick={onClose} className="p-1 hover:bg-[var(--hover-bg)] rounded" title="Close">
             <div className="i-lucide:x" />
           </button>
         </div>

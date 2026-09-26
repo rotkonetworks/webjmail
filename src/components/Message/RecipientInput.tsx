@@ -107,7 +107,7 @@ export function RecipientInput({
               }}
               onMouseEnter={() => setActive(i)}
               className={`w-full px-3 py-1.5 flex items-center gap-2 text-left text-sm ${
-                i === active ? 'bg-white/10' : ''
+                i === active ? 'bg-[var(--hover-bg)]' : ''
               }`}
             >
               <div className="w-6 h-6 flex-shrink-0 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-xs text-[var(--text-secondary)]">

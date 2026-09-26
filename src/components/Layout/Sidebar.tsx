@@ -274,7 +274,7 @@ export function Sidebar() {
           <>
             <button
               onClick={showCalendar}
-              className={`w-full px-4 py-2.5 flex items-center gap-3 text-left text-[var(--text-primary)] transition-all hover:bg-white/10 ${
+              className={`w-full px-4 py-2.5 flex items-center gap-3 text-left text-[var(--text-primary)] transition-all hover:bg-[var(--hover-bg)] ${
                 calendarVisible ? 'bg-[var(--primary-color)]/20 border-r-4 border-[var(--primary-color)]' : ''
               }`}
             >
@@ -292,7 +292,7 @@ export function Sidebar() {
                 hideCalendar()
                 showUnifiedInbox()
               }}
-              className={`w-full px-4 py-2.5 flex items-center gap-3 text-left text-[var(--text-primary)] transition-all hover:bg-white/10 ${
+              className={`w-full px-4 py-2.5 flex items-center gap-3 text-left text-[var(--text-primary)] transition-all hover:bg-[var(--hover-bg)] ${
                 !calendarVisible && unifiedView ? 'bg-[var(--primary-color)]/20 border-r-4 border-[var(--primary-color)]' : ''
               }`}
             >
@@ -323,7 +323,7 @@ export function Sidebar() {
               
               <div
                 {...dndProps(mailbox)}
-                className={`group relative w-full flex items-center transition-all hover:bg-white/10 ${
+                className={`group relative w-full flex items-center transition-all hover:bg-[var(--hover-bg)] ${
                   isSelected
                     ? 'bg-[var(--primary-color)]/20 border-r-4 border-[var(--primary-color)]'
                     : ''
@@ -365,7 +365,7 @@ export function Sidebar() {
                     <div className="absolute right-2 top-full z-50 mt-1 w-44 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg shadow-xl py-1">
                       <button
                         onClick={() => handleMarkRead(mailbox)}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-white/10 flex items-center gap-2"
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--hover-bg)] flex items-center gap-2"
                       >
                         <div className="i-lucide:check-check text-[var(--text-tertiary)]" /> Mark all read
                       </button>
@@ -373,7 +373,7 @@ export function Sidebar() {
                         <>
                           <button
                             onClick={() => handleRename(mailbox)}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-white/10 flex items-center gap-2"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--hover-bg)] flex items-center gap-2"
                           >
                             <div className="i-lucide:pencil text-[var(--text-tertiary)]" /> Rename
                           </button>
@@ -399,7 +399,7 @@ export function Sidebar() {
         <button
           onClick={() => setFolderModalOpen(true)}
           disabled={creatingFolder}
-          className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-primary)] hover:text-[var(--accent-cyan)] hover:bg-white/10 rounded transition-all disabled:opacity-50"
+          className="w-full flex items-center gap-3 px-3 py-2 text-[var(--text-primary)] hover:text-[var(--accent-cyan)] hover:bg-[var(--hover-bg)] rounded transition-all disabled:opacity-50"
           title="Create a new folder"
         >
           <div className={creatingFolder ? 'i-eos-icons:loading animate-spin' : 'i-lucide:folder-plus'} />

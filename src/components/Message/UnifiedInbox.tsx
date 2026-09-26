@@ -179,14 +179,14 @@ export function UnifiedInbox({ onSelectEmail }: UnifiedInboxProps) {
           </div>
           <div className="flex items-center gap-1">
             <button
-              className="px-2 py-1 text-xs rounded hover:bg-white/10 disabled:opacity-50 flex items-center gap-1"
+              className="px-2 py-1 text-xs rounded hover:bg-[var(--hover-bg)] disabled:opacity-50 flex items-center gap-1"
               onClick={markRead}
               disabled={bulkBusy}
             >
               <div className="i-lucide:mail-open" /> Read
             </button>
             <button
-              className="px-2 py-1 text-xs rounded hover:bg-white/10 disabled:opacity-50 flex items-center gap-1"
+              className="px-2 py-1 text-xs rounded hover:bg-[var(--hover-bg)] disabled:opacity-50 flex items-center gap-1"
               onClick={markUnread}
               disabled={bulkBusy}
             >
@@ -200,7 +200,7 @@ export function UnifiedInbox({ onSelectEmail }: UnifiedInboxProps) {
               <div className="i-lucide:trash-2" /> Delete
             </button>
             <button
-              className="p-1 ml-1 rounded hover:bg-white/10"
+              className="p-1 ml-1 rounded hover:bg-[var(--hover-bg)]"
               onClick={() => setSelected(new Set())}
               title="Clear selection"
             >
@@ -224,7 +224,7 @@ export function UnifiedInbox({ onSelectEmail }: UnifiedInboxProps) {
             )}
           </span>
           <button
-            className="p-1 hover:bg-white/10 rounded active:scale-90 transition-transform disabled:opacity-70"
+            className="p-1 hover:bg-[var(--hover-bg)] rounded active:scale-90 transition-transform disabled:opacity-70"
             title="Refresh"
             onClick={trigger}
             disabled={refreshing}
@@ -286,7 +286,7 @@ export function UnifiedInbox({ onSelectEmail }: UnifiedInboxProps) {
                     <div className="flex items-center justify-between gap-2 mb-0.5">
                       <span
                         className={`truncate text-sm ${isUnread ? 'font-semibold' : 'font-medium'} ${
-                          isSelected ? 'text-white' : 'text-[var(--text-primary)]'
+                          'text-[var(--text-primary)]'
                         }`}
                       >
                         {senderName}
@@ -297,7 +297,7 @@ export function UnifiedInbox({ onSelectEmail }: UnifiedInboxProps) {
                     </div>
                     <div
                       className={`mb-0.5 truncate text-sm ${isUnread ? 'font-medium' : ''} ${
-                        isSelected ? 'text-white' : 'text-[var(--text-primary)]'
+                        'text-[var(--text-primary)]'
                       }`}
                     >
                       {email.subject || '(no subject)'}
@@ -311,7 +311,7 @@ export function UnifiedInbox({ onSelectEmail }: UnifiedInboxProps) {
                       </span>
                       <span
                         className={`truncate text-sm min-w-0 ${
-                          isSelected ? 'text-white/70' : 'text-[var(--text-tertiary)]'
+                          'text-[var(--text-tertiary)]'
                         }`}
                       >
                         {email.preview || ''}

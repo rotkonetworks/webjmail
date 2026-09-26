@@ -40,6 +40,9 @@
   --primary-hover: #b83d68;
   --compose-btn: #d1477a;
   --unread-dot: #5cb3c4;
+  --email-paper-bg: transparent;
+  --email-paper-fg: currentColor;
+  --hover-bg: rgba(0, 0, 0, 0.06);
 }
 
 /* Monokai Dark Theme (default) */
@@ -73,6 +76,12 @@
   --primary-hover: #ff4d7d;
   --compose-btn: #ff6188;
   --unread-dot: #78dce8;
+  /* Rich HTML email bodies are rendered on a light "paper" surface in dark
+     themes: senders hard-code dark text (color:#000/#333, <font color>) with no
+     background, which lands black-on-black on the Monokai canvas. */
+  --email-paper-bg: #ffffff;
+  --email-paper-fg: #1a1a1a;
+  --hover-bg: rgba(255, 255, 255, 0.1);
 }
 
 /* Polkadot Light Theme */
@@ -103,6 +112,9 @@
   --primary-hover: #b83d68;
   --compose-btn: #d1477a;
   --unread-dot: #5cb3c4;
+  --email-paper-bg: transparent;
+  --email-paper-fg: currentColor;
+  --hover-bg: rgba(0, 0, 0, 0.06);
 }
 
 /* Auto theme detection */
@@ -130,6 +142,9 @@
     --primary-hover: #b83d68;
     --compose-btn: #d1477a;
     --unread-dot: #5cb3c4;
+    --email-paper-bg: transparent;
+    --email-paper-fg: currentColor;
+    --hover-bg: rgba(0, 0, 0, 0.06);
   }
 }
 
@@ -157,6 +172,9 @@
     --primary-hover: #ff4d7d;
     --compose-btn: #ff6188;
     --unread-dot: #78dce8;
+    --email-paper-bg: #ffffff;
+    --email-paper-fg: #1a1a1a;
+    --hover-bg: rgba(255, 255, 255, 0.1);
   }
 }
 
@@ -235,7 +253,7 @@ body {
 .search-input:focus {
   background: var(--bg-tertiary);
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 25%, transparent);
 }
 
 /* Button styles */
@@ -293,7 +311,7 @@ body {
   height: 8px;
   background: var(--primary-color);
   border-radius: 50%;
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 0 3px var(--bg-primary);
 }
 
 /* Unread indicator */
@@ -474,6 +492,41 @@ input[type='radio']:checked::after {
 
 .theme-btn:hover {
   transform: scale(1.05);
+}
+
+/* Rich HTML email body. On a dark theme it sits on a light paper surface
+   (tokens above) so sender-chosen dark text stays readable; on light themes the
+   tokens are transparent/inherit and nothing changes. Plain-text and "minimal"
+   bodies drop the sender's colors and follow the app theme instead. */
+.email-html {
+  background: var(--email-paper-bg);
+  color: var(--email-paper-fg);
+  border-radius: 6px;
+}
+/* The reset makes links `color: inherit`, so unstyled links in mail were
+   indistinguishable from text. :where() keeps this at zero extra specificity so
+   the sender's own (scoped) link styles and inline styles still win. */
+.email-html :where(a) {
+  color: #0b57d0;
+  text-decoration: underline;
+}
+[data-theme='dark'] .email-html {
+  color-scheme: light;
+  padding: 16px;
+  /* Our own injected bits (blocked-image placeholders) read these tokens —
+     keep them light-on-paper rather than dark boxes on white. */
+  --bg-tertiary: #f0f0f0;
+  --text-secondary: #555555;
+  --border-color: #dddddd;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .email-html {
+    color-scheme: light;
+    padding: 16px;
+    --bg-tertiary: #f0f0f0;
+    --text-secondary: #555555;
+    --border-color: #dddddd;
+  }
 }
 
 /* Prose styles for email content */
