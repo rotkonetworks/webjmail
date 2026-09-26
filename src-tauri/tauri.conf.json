@@ -37,6 +37,19 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "ics",
+          "ical",
+          "icalendar"
+        ],
+        "mimeType": "text/calendar",
+        "name": "iCalendar",
+        "description": "Calendar event",
+        "role": "Viewer"
+      }
+    ]
   }
 }

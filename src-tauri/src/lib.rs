@@ -1,13 +1,30 @@
+mod ics_open;
 mod vault;
+
+use tauri::Manager;
 
 use vault::Vault;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Must be registered first: a second launch (e.g. double-clicking an
+        // .ics while the app is open) forwards its argv here and exits.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            ics_open::handle_args(app, &argv, std::path::Path::new(&cwd));
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .manage(Vault::default())
+        .manage(ics_open::PendingIcs::default())
         .setup(|app| {
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            let cwd = std::env::current_dir().unwrap_or_default();
+            ics_open::handle_args(app.handle(), &args, &cwd);
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -33,6 +50,7 @@ pub fn run() {
             vault::account_remove,
             vault::open_external,
             vault::reveal_item,
+            ics_open::take_pending_ics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
