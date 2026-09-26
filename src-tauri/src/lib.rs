@@ -1,3 +1,4 @@
+mod alerts;
 mod ics_open;
 mod vault;
 
@@ -51,6 +52,8 @@ pub fn run() {
             vault::open_external,
             vault::reveal_item,
             ics_open::take_pending_ics,
+            alerts::notify_desktop,
+            alerts::ntfy_publish,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
