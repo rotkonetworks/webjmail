@@ -128,7 +128,7 @@ pub async fn ntfy_publish(alert: NtfyAlert) -> Result<(), String> {
         body["tags"] = t.into();
     }
 
-    let mut req = reqwest::Client::new()
+    let mut req = crate::vault::http()
         .post(server)
         .header("Content-Type", "application/json")
         .body(body.to_string())

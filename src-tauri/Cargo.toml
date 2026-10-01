@@ -25,6 +25,7 @@ tauri = { version = "2.11.2", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-opener = "2"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "charset", "http2"] }
+tokio = { version = "1", features = ["time"] }
 age = "0.10"
 base64 = "0.22"
 toml = "0.8"

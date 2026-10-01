@@ -1,5 +1,6 @@
 mod alerts;
 mod ics_open;
+mod push;
 mod vault;
 
 use tauri::Manager;
@@ -21,6 +22,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .manage(Vault::default())
+        .manage(push::Push::default())
         .manage(ics_open::PendingIcs::default())
         .setup(|app| {
             let args: Vec<String> = std::env::args().skip(1).collect();
@@ -37,6 +39,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             vault::jmap_unlock,
+            push::push_start,
+            push::push_stop,
             vault::jmap_login,
             vault::jmap_request,
             vault::jmap_download,

@@ -16,7 +16,7 @@ use std::io::{Read, Write};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use age::secrecy::ExposeSecret;
 use base64::Engine;
@@ -395,7 +395,7 @@ fn make_token(username: &str, password: &str) -> String {
 }
 
 /// Select the auth token for a request: the named account, or the active one.
-fn token_for(vault: &Vault, account: &Option<String>) -> Result<String, String> {
+pub(crate) fn token_for(vault: &Vault, account: &Option<String>) -> Result<String, String> {
     match account {
         Some(name) => vault
             .accounts
@@ -497,8 +497,17 @@ fn normalize_session_urls(session: &str, discovery: &str) -> String {
     serde_json::to_string(&v).unwrap_or_else(|_| session.to_string())
 }
 
+/// One shared HTTP client for every JMAP call. reqwest pools connections per
+/// client, so a fresh `Client::new()` per request paid a full TCP+TLS handshake
+/// each time (~0.8s of a ~1s round-trip to mail.rotko.net); reusing it keeps the
+/// connection alive across requests.
+pub(crate) fn http() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(reqwest::Client::new)
+}
+
 async fn http_get_session(server: &str, token: &str) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = http();
     let resp = client
         .get(server)
         .header("Authorization", token)
@@ -800,7 +809,7 @@ pub async fn jmap_request(
             .ok_or_else(|| "Not authenticated".to_string())?,
     };
 
-    let client = reqwest::Client::new();
+    let client = http();
     let resp = client
         .post(&api_url)
         .header("Authorization", &token)
@@ -831,7 +840,7 @@ pub async fn jmap_download(
         .clone()
         .ok_or_else(|| "Not authenticated".to_string())?;
 
-    let client = reqwest::Client::new();
+    let client = http();
     let resp = client
         .get(&url)
         .header("Authorization", &token)
@@ -869,7 +878,7 @@ pub async fn jmap_download_save(
 ) -> Result<String, String> {
     let token = token_for(vault.inner(), &account)?;
 
-    let client = reqwest::Client::new();
+    let client = http();
     let resp = client
         .get(&url)
         .header("Authorization", &token)
@@ -908,7 +917,7 @@ pub async fn jmap_upload(
         .decode(data_base64.as_bytes())
         .map_err(|e| format!("bad base64: {e}"))?;
 
-    let client = reqwest::Client::new();
+    let client = http();
     let resp = client
         .post(&upload_url)
         .header("Authorization", &token)
