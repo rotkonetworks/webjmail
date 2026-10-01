@@ -536,11 +536,20 @@ async fn http_get_session(server: &str, token: &str) -> Result<String, String> {
 /// Decrypt stored credentials and authenticate. Returns the JMAP session JSON,
 /// or `None` if no credentials are stored yet (frontend then shows the form).
 #[tauri::command]
-pub async fn jmap_unlock(app: AppHandle, vault: State<'_, Vault>) -> Result<Option<String>, String> {
+pub async fn jmap_unlock(
+    app: AppHandle,
+    vault: State<'_, Vault>,
+    preferred: Option<String>,
+) -> Result<Option<String>, String> {
     let dir = config_dir(&app)?;
 
+    // The account map and active token are installed BEFORE the session fetch:
+    // the frontend renders from its cache while this runs, and if the server is
+    // unreachable the token is still in place for requests once it comes back.
+
     // 1) UI-managed multi-account vault (accounts.age) — all platforms. Build the
-    //    switchable map (plus manifest accounts on desktop) and auto-login the first.
+    //    switchable map (plus manifest accounts on desktop) and auto-login the
+    //    preferred (last active) account, else the first.
     let stored = load_stored_accounts(&dir).unwrap_or_default();
     if !stored.is_empty() {
         let mut map: HashMap<String, AccountAuth> = HashMap::new();
@@ -564,25 +573,31 @@ pub async fn jmap_unlock(app: AppHandle, vault: State<'_, Vault>) -> Result<Opti
                 }
             }
         }
-        let first = &stored[0];
-        let token = make_token(&first.username, &first.password);
-        let session = http_get_session(&first.server, &token).await?;
-        *vault.token.lock().unwrap() = Some(token);
+        let auth = preferred
+            .as_ref()
+            .and_then(|n| map.get(n).cloned())
+            .unwrap_or_else(|| AccountAuth {
+                server: stored[0].server.clone(),
+                token: make_token(&stored[0].username, &stored[0].password),
+            });
+        *vault.token.lock().unwrap() = Some(auth.token.clone());
         *vault.accounts.lock().unwrap() = map;
+        let session = http_get_session(&auth.server, &auth.token).await?;
         return Ok(Some(session));
     }
 
     // 2) Legacy single-account vault (persisted by a manual login).
     if let Some(creds) = decrypt_credentials(&dir)? {
         let token = make_token(&creds.username, &creds.password);
+        *vault.token.lock().unwrap() = Some(token.clone());
         let session = http_get_session(&creds.server, &token).await?;
-        *vault.token.lock().unwrap() = Some(token);
         return Ok(Some(session));
     }
 
-    // 3) Multi-account manifest: resolve every account, auto-login the first.
-    //    Desktop-only — reads the user's live age store (CLI + ~/.ssh identities),
-    //    which doesn't exist on mobile. Mobile falls through to the login form.
+    // 3) Multi-account manifest: resolve every account, auto-login the preferred
+    //    one, else the first. Desktop-only — reads the user's live age store
+    //    (CLI + ~/.ssh identities), which doesn't exist on mobile. Mobile falls
+    //    through to the login form.
     #[cfg(desktop)]
     if let Some(manifest) = load_manifest(&dir)? {
         let mut map: HashMap<String, AccountAuth> = HashMap::new();
@@ -595,22 +610,25 @@ pub async fn jmap_unlock(app: AppHandle, vault: State<'_, Vault>) -> Result<Opti
             }
         }
 
-        let first = manifest
-            .account
-            .iter()
-            .find(|s| map.contains_key(&s.name))
-            .and_then(|s| map.get(&s.name).cloned());
+        let first = preferred
+            .as_ref()
+            .and_then(|n| map.get(n).cloned())
+            .or_else(|| {
+                manifest
+                    .account
+                    .iter()
+                    .find(|s| map.contains_key(&s.name))
+                    .and_then(|s| map.get(&s.name).cloned())
+            });
 
-        let session = if let Some(auth) = first {
-            let session = http_get_session(&auth.server, &auth.token).await?;
+        if let Some(auth) = &first {
             *vault.token.lock().unwrap() = Some(auth.token.clone());
-            Some(session)
-        } else {
-            None
-        };
-
+        }
         *vault.accounts.lock().unwrap() = map;
-        return Ok(session);
+        return match first {
+            Some(auth) => Ok(Some(http_get_session(&auth.server, &auth.token).await?)),
+            None => Ok(None),
+        };
     }
 
     Ok(None)
