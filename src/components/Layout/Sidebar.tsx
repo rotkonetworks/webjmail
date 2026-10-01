@@ -137,9 +137,11 @@ export function Sidebar() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
   
-  // Auto-select inbox
+  // Auto-select inbox — also when the remembered folder no longer exists (deleted,
+  // or it belonged to another account). The unified view has no folder selected.
   React.useEffect(() => {
-    if (!selectedMailboxId && mailboxes && mailboxes.length > 0) {
+    if (!mailboxes || mailboxes.length === 0 || unifiedView) return
+    if (!selectedMailboxId || !mailboxes.some((m) => m.id === selectedMailboxId)) {
       const inbox = mailboxes.find((m) => m.role === 'inbox')
       if (inbox) {
         selectMailbox(inbox.id)
@@ -147,7 +149,7 @@ export function Sidebar() {
         selectMailbox(mailboxes[0].id)
       }
     }
-  }, [mailboxes, selectedMailboxId, selectMailbox])
+  }, [mailboxes, selectedMailboxId, selectMailbox, unifiedView])
   
   // Sort mailboxes with custom order
   const sortedMailboxes = React.useMemo(() => {

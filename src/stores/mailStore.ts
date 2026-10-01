@@ -43,16 +43,38 @@ interface MailState {
   getUnreadCount: (mailboxId: string) => number
 }
 
+// Last view (folder / open email / unified) survives restarts so a launch opens
+// where the user left off instead of resetting to the inbox. Only these three
+// ids are kept — the email/mailbox data itself comes from the IndexedDB cache.
+const VIEW_KEY = 'webjmail:last-view'
+type LastView = Pick<MailState, 'selectedMailboxId' | 'selectedEmailId' | 'unifiedView'>
+function loadLastView(): LastView {
+  try {
+    const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null')
+    if (v && typeof v === 'object') {
+      return {
+        selectedMailboxId: typeof v.selectedMailboxId === 'string' ? v.selectedMailboxId : null,
+        selectedEmailId: typeof v.selectedEmailId === 'string' ? v.selectedEmailId : null,
+        unifiedView: v.unifiedView === true,
+      }
+    }
+  } catch {
+    /* ignore storage errors */
+  }
+  return { selectedMailboxId: null, selectedEmailId: null, unifiedView: false }
+}
+const lastView = loadLastView()
+
 export const useMailStore = create<MailState>()(
   subscribeWithSelector(
     immer((set, get) => ({
       mailboxes: {},
       emails: {},
-      selectedMailboxId: null,
-      selectedEmailId: null,
+      selectedMailboxId: lastView.selectedMailboxId,
+      selectedEmailId: lastView.selectedEmailId,
       emailsByMailbox: {},
       unreadCounts: {},
-      unifiedView: false,
+      unifiedView: lastView.unifiedView,
 
       setMailboxes: (mailboxes) =>
         set((state) => {
@@ -230,6 +252,27 @@ export const useMailStore = create<MailState>()(
       },
     }))
   )
+)
+
+useMailStore.subscribe(
+  (state): LastView => ({
+    selectedMailboxId: state.selectedMailboxId,
+    selectedEmailId: state.selectedEmailId,
+    unifiedView: state.unifiedView,
+  }),
+  (view) => {
+    try {
+      localStorage.setItem(VIEW_KEY, JSON.stringify(view))
+    } catch {
+      /* ignore storage errors */
+    }
+  },
+  {
+    equalityFn: (a, b) =>
+      a.selectedMailboxId === b.selectedMailboxId &&
+      a.selectedEmailId === b.selectedEmailId &&
+      a.unifiedView === b.unifiedView,
+  }
 )
 
 if (import.meta.env.DEV) {

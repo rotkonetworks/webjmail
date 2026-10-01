@@ -392,6 +392,46 @@ export const useAuthStore = create<AuthState>()(
         // Desktop build: decrypt the age vault and auto-authenticate. No token
         // is read from localStorage — the master key in Rust is the source of truth.
         if (isTauri) {
+          // Returning user: render immediately from the session persisted last
+          // run (the list/folders come from the IndexedDB cache) and unlock the
+          // vault in the background — instead of a spinner for the whole
+          // decrypt + server round-trip. Requests queue behind the unlock.
+          const cached = get().session
+          if (get().isAuthenticated && cached?.apiUrl) {
+            jmapClient.adoptCachedSession(cached)
+            set({ isLoading: false, error: null })
+            jmapClient
+              .unlock(get().activeAccount)
+              .then((session) => {
+                if (!session) {
+                  // Credentials are gone — back to the login form.
+                  jmapClient.clearSession()
+                  set({ isAuthenticated: false, session: null, sessionInfo: null })
+                  return
+                }
+                set({
+                  session,
+                  sessionInfo: { server: session.apiUrl, username: session.username, token: '' },
+                  error: null,
+                })
+                void get().loadAccounts()
+              })
+              .catch((error) => {
+                const message =
+                  error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unlock failed'
+                console.error('[AuthStore] Vault unlock failed:', message)
+                if (message.includes('(401)')) {
+                  jmapClient.clearSession()
+                  set({ isAuthenticated: false, session: null, sessionInfo: null, error: message })
+                  return
+                }
+                // Server unreachable: keep showing cached mail. The Rust token is
+                // already in place, so polling recovers once the server is back.
+                toast.error(`Can't reach the mail server — showing cached mail. ${message}`, 8000)
+              })
+            return
+          }
+
           set({ isLoading: true })
           try {
             const session = await jmapClient.unlock()
@@ -469,6 +509,10 @@ export const useAuthStore = create<AuthState>()(
         sessionInfo: state.sessionInfo,
         isAuthenticated: state.isAuthenticated,
         session: state.session,
+        // Kept so the switcher / unified inbox render before the vault unlocks,
+        // and so the next launch logs back into the same account.
+        accounts: state.accounts,
+        activeAccount: state.activeAccount,
       }),
     }
   )
