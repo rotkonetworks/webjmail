@@ -1,6 +1,6 @@
 // src/api/jmap.ts - Fixed EventSource implementation
 import { JMAPSession, Email, Mailbox, JMAPRequest, JMAPResponse } from './types'
-import { isTauri, invoke } from '../lib/tauri'
+import { isTauri, invoke, Channel } from '../lib/tauri'
 
 // Verbose request/response logging, DEV-only — production must never log auth
 // material or full message contents to the console.
@@ -15,6 +15,15 @@ export class JMAPClient {
   private session: JMAPSession | null = null
   private accessToken: string = ''
   private baseUrl: string = ''
+  // Desktop: the in-flight `jmap_unlock`. The UI renders from the cached session
+  // while the vault unlocks; commands that need the Rust-side token wait on this.
+  private ready: Promise<unknown> = Promise.resolve()
+
+  // Invoke a Rust command that needs the vault token, after the unlock settles.
+  private async call<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
+    await this.ready.catch(() => {})
+    return invoke<T>(cmd, args)
+  }
 
   // Turn a raw session response into a JMAPSession, or throw a CLEAR error.
   // A server that's unreachable/misconfigured (or a reverse proxy during an
@@ -75,12 +84,24 @@ export class JMAPClient {
 
   // Decrypt stored credentials (if any) and auto-authenticate on launch.
   // Returns the session, or null when no credentials are stored yet.
-  async unlock(): Promise<JMAPSession | null> {
+  // `preferred` = the account to log into (the last active one); Rust falls back
+  // to the first configured account if it's gone.
+  async unlock(preferred?: string | null): Promise<JMAPSession | null> {
     if (!isTauri) return null
-    const text = await invoke<string | null>('jmap_unlock')
+    const pending = invoke<string | null>('jmap_unlock', { preferred: preferred ?? null })
+    this.ready = pending
+    const text = await pending
     if (!text) return null
     this.accessToken = ''
     return this.applySession(text)
+  }
+
+  // Desktop: adopt the session persisted from the last run so the UI can render
+  // (and read the local cache) before `unlock()` finishes.
+  adoptCachedSession(session: JMAPSession) {
+    this.session = session
+    this.accessToken = ''
+    this.baseUrl = ''
   }
 
   // Configured accounts from the manifest (desktop only). No secrets returned.
@@ -360,6 +381,19 @@ export class JMAPClient {
   }
 
   async request(methodCalls: Array<[string, any, string]>) {
+    const responses = await this.requestRaw(methodCalls)
+    for (const [method, result] of responses) {
+      if (method === 'error') {
+        console.error('[JMAP] Method error:', result)
+        throw new Error(result.description || result.type || 'JMAP method error')
+      }
+    }
+    return responses
+  }
+
+  // Like `request`, but per-method `error` responses are returned instead of
+  // thrown — the delta sync needs to see e.g. `cannotCalculateChanges`.
+  async requestRaw(methodCalls: Array<[string, any, string]>): Promise<Array<[string, any, string]>> {
     if (!this.session) {
       throw new Error('Not authenticated')
     }
@@ -371,16 +405,11 @@ export class JMAPClient {
 
     // Desktop: proxy through Rust (no CORS, auth attached server-side).
     if (isTauri) {
-      const text = await invoke<string>('jmap_request', {
+      const text = await this.call<string>('jmap_request', {
         apiUrl: this.session.apiUrl,
         body: JSON.stringify(request),
       })
       const data: JMAPResponse = JSON.parse(text)
-      for (const [method, result] of data.methodResponses) {
-        if (method === 'error') {
-          throw new Error(result.description || 'JMAP method error')
-        }
-      }
       return data.methodResponses
     }
 
@@ -427,14 +456,6 @@ export class JMAPClient {
         methodResponses: data.methodResponses.map(([method, , id]) => `${method}[${id}]`),
         sessionState: data.sessionState,
       })
-
-      // Check for method-level errors
-      for (const [method, result, _id] of data.methodResponses) {
-        if (method === 'error') {
-          console.error('[JMAP] Method error:', result)
-          throw new Error(result.description || 'JMAP method error')
-        }
-      }
 
       return data.methodResponses
     } catch (error) {
@@ -629,6 +650,69 @@ export class JMAPClient {
     }
   }
 
+  // Full list properties (headers + bodies) — what the local cache stores.
+  static readonly EMAIL_PROPERTIES = [
+    'id', 'blobId', 'threadId', 'mailboxIds', 'keywords', 'size', 'receivedAt', 'subject',
+    'from', 'to', 'cc', 'bcc', 'replyTo', 'sentAt', 'hasAttachment', 'preview',
+    'bodyStructure', 'bodyValues', 'textBody', 'htmlBody', 'attachments',
+  ]
+
+  // Server limit on ids per /get (RFC 8620 maxObjectsInGet), default 500.
+  maxObjectsInGet(): number {
+    const core = this.session?.capabilities?.['urn:ietf:params:jmap:core'] as any
+    return Math.max(1, Math.min(Number(core?.maxObjectsInGet) || 500, 500))
+  }
+
+  // Email/get by ids, chunked to the server's maxObjectsInGet.
+  async getEmailsByIds(accountId: string, ids: string[], properties?: string[]): Promise<Email[]> {
+    const props = properties ?? JMAPClient.EMAIL_PROPERTIES
+    const withBodies = props.includes('bodyValues')
+    const out: Email[] = []
+    const step = withBodies ? 50 : this.maxObjectsInGet()
+    for (let i = 0; i < ids.length; i += step) {
+      const [[, res]] = await this.request([
+        [
+          'Email/get',
+          {
+            accountId,
+            ids: ids.slice(i, i + step),
+            properties: props,
+            ...(withBodies && {
+              fetchTextBodyValues: true,
+              fetchHTMLBodyValues: true,
+              maxBodyValueBytes: 256 * 1024,
+            }),
+          },
+          '0',
+        ],
+      ])
+      out.push(...(res.list || []))
+    }
+    return out
+  }
+
+  // Desktop push: Rust holds a long-poll on the JMAP EventSource for the active
+  // account and streams each StateChange (JSON text) to `onEvent`; `"ping"` is
+  // sent once a connection is up. No-op in the browser (EventSource can't send
+  // the Authorization header there).
+  async startPush(onEvent: (data: string) => void): Promise<boolean> {
+    if (!isTauri || !this.session?.eventSourceUrl) return false
+    const url = decodeBraces(this.session.eventSourceUrl)
+      .replace('{types}', 'Email,Mailbox')
+      // Long-poll: the server closes after each change, which also gets the
+      // event through reverse proxies that buffer streamed responses.
+      .replace('{closeafter}', 'state')
+      .replace('{ping}', '0')
+    const channel = new Channel<string>()
+    channel.onmessage = onEvent
+    await this.call('push_start', { url, onEvent: channel })
+    return true
+  }
+
+  async stopPush(): Promise<void> {
+    if (isTauri) await invoke('push_stop').catch(() => {})
+  }
+
   // --- Unified inbox (desktop, multi-account) -----------------------------
   // Per-account JMAP sessions, memoized for the app run (stable; avoids
   // re-hitting account_session on every unified refresh / bulk action).
@@ -639,7 +723,7 @@ export class JMAPClient {
     if (!isTauri) throw new Error('Unified inbox is only available in the desktop app')
     const cached = this.accountSessions.get(name)
     if (cached) return cached
-    const text = await invoke<string>('account_session', { name })
+    const text = await this.call<string>('account_session', { name })
     const session = this.parseSessionText(text)
     this.accountSessions.set(name, session)
     return session
@@ -654,7 +738,7 @@ export class JMAPClient {
   ) {
     if (!isTauri) throw new Error('Unified inbox is only available in the desktop app')
     const body = JSON.stringify({ using: Object.keys(session.capabilities), methodCalls })
-    const text = await invoke<string>('jmap_request', {
+    const text = await this.call<string>('jmap_request', {
       apiUrl: session.apiUrl,
       body,
       account: accountName,
@@ -904,7 +988,7 @@ export class JMAPClient {
   // the plain <a download> fallback).
   async downloadBlob(url: string, filename: string): Promise<string | null> {
     if (!isTauri) return null
-    return invoke<string>('jmap_download_save', { url, filename })
+    return this.call<string>('jmap_download_save', { url, filename })
   }
 
   // Web: fetch a blob WITH the auth header so the browser never falls back to a
@@ -925,7 +1009,7 @@ export class JMAPClient {
   // Desktop goes through Rust (auth + CORS); web uses the authed fetch.
   async fetchBlobText(url: string): Promise<string> {
     if (isTauri) {
-      const r = await invoke<{ contentType: string; data: string }>('jmap_download', { url })
+      const r = await this.call<{ contentType: string; data: string }>('jmap_download', { url })
       const bin = atob(r.data)
       const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
       return new TextDecoder().decode(bytes)
@@ -954,7 +1038,7 @@ export class JMAPClient {
         reader.onerror = () => reject(reader.error)
         reader.readAsDataURL(file)
       })
-      const text = await invoke<string>('jmap_upload', { uploadUrl, contentType, dataBase64 })
+      const text = await this.call<string>('jmap_upload', { uploadUrl, contentType, dataBase64 })
       res = JSON.parse(text)
     } else {
       const resp = await fetch(this.getProxiedUrl(uploadUrl), {

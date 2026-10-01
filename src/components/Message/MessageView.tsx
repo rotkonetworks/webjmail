@@ -11,6 +11,8 @@ import {
   useEmailThread,
 } from '../../hooks'
 import { useDeviceType } from '../../hooks/useDeviceType'
+import { useCurrentUserId } from '../../hooks/useIndexedDB'
+import { syncManager } from '../../db/sync'
 import DOMPurify from 'dompurify'
 import { format } from 'date-fns'
 import { jmapClient } from '../../api/jmap'
@@ -227,10 +229,12 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
   // The list keeps emails in mailStore, but an email selected from search, the
   // assistant, or a thread (or after the row-mode list unmounts) may not be in
   // that store. Fetch it on demand so the view never blanks.
-  const needsFetch = !!selectedEmailId && !email && !!accountId
+  // Cache first (instant, offline); the server only when it isn't cached.
+  const userId = useCurrentUserId()
+  const needsFetch = !!selectedEmailId && !email && !!accountId && !!userId
   const { data: fetchedEmail, isLoading: isFetchingEmail } = useQuery({
     queryKey: ['email', accountId, selectedEmailId],
-    queryFn: () => jmapClient.getEmailById(accountId!, selectedEmailId!),
+    queryFn: () => syncManager.loadEmail(accountId!, userId!, selectedEmailId!),
     enabled: needsFetch,
   })
   useEffect(() => {
@@ -298,7 +302,8 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
         to: email.to || [],
         cc: email.cc,
         date: email.receivedAt || email.sentAt,
-        textBody: getPlainText(email),
+        // List rows carry no body; the thread copy does.
+        textBody: getPlainText(displayEmails.find((e) => e.id === email.id) ?? email),
         // Carry the original's attachments forward (re-referenced by blobId).
         attachments:
           mode === 'forward'
@@ -458,7 +463,7 @@ export function MessageView({ onClose, onReply }: MessageViewProps = {}) {
     // text part via <pre> so newlines/indentation survive.
     const isHtml = htmlPart?.type === 'text/html'
     const part = isHtml ? htmlPart : textPart ?? htmlPart
-    const bodyValue = part ? email.bodyValues[part.partId] : null
+    const bodyValue = part ? email.bodyValues?.[part.partId] : null
 
     if (!bodyValue) return null
 

@@ -1,66 +1,64 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { jmapClient } from '../api/jmap'
-import { useAuthStore } from '../stores/authStore'
+import React from 'react'
+import { useCacheQuery } from './useCacheQuery'
 import { useMailStore } from '../stores/mailStore'
 import { usePrimaryAccountId } from './usePrimaryAccountId'
 import { useCurrentUserId } from './useIndexedDB'
+import { db } from '../db'
 import { syncManager } from '../db/sync'
+import type { Mailbox } from '../api/types'
 
 /**
- * Local-first folder list. Renders the cached mailboxes from IndexedDB instantly
- * on launch, then refreshes from the server in the background and only re-renders
- * if anything actually changed.
+ * Local-first, reactive folder list: a live query over the cached mailboxes,
+ * kept current by the delta sync (which replaces them whenever the server's
+ * Mailbox state moves — e.g. unread counts). Fetched directly only when the
+ * cache has none yet.
  */
 export function useMailboxes() {
-  const session = useAuthStore((state) => state.session)
   const accountId = usePrimaryAccountId()
   const userId = useCurrentUserId()
   const setMailboxes = useMailStore((state) => state.setMailboxes)
-  const queryClient = useQueryClient()
+  const [error, setError] = React.useState<unknown>(null)
 
-  return useQuery({
-    queryKey: ['mailboxes', accountId],
-    queryFn: async () => {
-      if (!accountId) throw new Error('No account ID')
-      if (!userId) {
-        // No user context yet — fetch without persisting to avoid a bad cache key.
-        const fresh = await jmapClient.getMailboxes(accountId)
-        setMailboxes(fresh)
-        return fresh
-      }
-
-      await syncManager.ensureUser(userId)
-      const cached = await syncManager.getCachedMailboxes(userId)
-
-      if (cached.length > 0) {
-        setMailboxes(cached)
-        // Background refresh; only invalidate (re-render) if the server differs.
-        syncManager
-          .fetchAndCacheMailboxes(accountId, userId)
-          .then((fresh) => {
-            if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
-              queryClient.invalidateQueries({ queryKey: ['mailboxes', accountId] })
-            }
-          })
-          .catch((e) => {
-            if (import.meta.env.DEV) console.error('[useMailboxes] refresh failed:', e)
-          })
-        return cached
-      }
-
-      // Cold cache → fetch from the server and persist.
-      const fresh = await syncManager.fetchAndCacheMailboxes(accountId, userId)
-      setMailboxes(fresh)
-      return fresh
+  const data = useCacheQuery(
+    async (): Promise<Mailbox[]> => {
+      if (!userId) return []
+      const rows = await db.folders.where('_userId').equals(userId).toArray()
+      return rows.map(({ _userId, ...mb }) => mb)
     },
-    enabled: !!session && !!accountId,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: (failureCount, error) => {
-      // Don't retry on 401 errors
-      if (error instanceof Error && error.message.includes('401')) {
-        return false
-      }
-      return failureCount < 3
-    },
-  })
+    [userId],
+    [] as Mailbox[]
+  )
+
+  // Last server fetch, shown only if the cache yields nothing (cache disabled
+  // after a storage fault).
+  const [fetched, setFetched] = React.useState<{ userId: string; list: Mailbox[] } | null>(null)
+
+  const refetch = React.useCallback(async () => {
+    if (!accountId || !userId) return
+    try {
+      const list = await syncManager.fetchAndCacheMailboxes(accountId, userId)
+      setFetched({ userId, list })
+      setError(null)
+    } catch (e) {
+      setError(e)
+    }
+  }, [accountId, userId])
+
+  // Cold cache (first run) → fetch now rather than wait for the reconcile.
+  React.useEffect(() => {
+    if (data && data.length === 0) void refetch()
+  }, [data, refetch])
+
+  const shown = data && data.length === 0 && fetched?.userId === userId ? fetched.list : data
+
+  React.useEffect(() => {
+    if (shown && shown.length > 0) setMailboxes(shown)
+  }, [shown, setMailboxes])
+
+  return {
+    data: shown,
+    isLoading: shown === undefined || (shown.length === 0 && !error),
+    error: shown && shown.length > 0 ? null : error,
+    refetch,
+  }
 }

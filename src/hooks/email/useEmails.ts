@@ -1,160 +1,107 @@
 import React from 'react'
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { useAuthStore } from '../../stores/authStore'
+import { useCacheQuery } from '../useCacheQuery'
+import { useSyncStatusStore } from '../../stores/syncStatusStore'
 import { useMailStore } from '../../stores/mailStore'
 import { usePrimaryAccountId } from '../usePrimaryAccountId'
 import { useCurrentUserId } from '../useIndexedDB'
-import { syncManager } from '../../db/sync'
-import { config } from '../../config'
+import { db, mailboxSortRange, type CachedEmail } from '../../db'
 import type { Email } from '../../api/types'
-
-interface EmailsResponse {
-  emails: Email[]
-  total: number
-  position: number
-}
+import { syncManager } from '../../db/sync'
 
 const PAGE_SIZE = 50
 
 /**
- * Local-first inbox list.
+ * Local-first, reactive mailbox list.
  *
- * The list is served from the IndexedDB cache so it renders instantly on launch
- * (no "reload everything from the server" flash) and works offline. A quiet
- * background revalidation fetches the newest page from the server, writes it
- * through to the cache, and refreshes the view — stale-while-revalidate. Falls
- * back to a direct server fetch only when a page isn't cached yet (e.g. first
- * run before the full index has populated, or scrolling past the cached range).
+ * Renders a live query over the IndexedDB mirror: whenever the delta sync (or an
+ * optimistic action) writes a row in this range, the list updates by itself —
+ * there's no refetch/invalidate step. The server is only touched here when the
+ * cache doesn't reach far enough yet (first run before the reconcile finishes,
+ * or scrolling past what's cached).
  */
 export function useEmails(mailboxId: string | null) {
-  const session = useAuthStore((state) => state.session)
   const accountId = usePrimaryAccountId()
   const userId = useCurrentUserId()
   const addEmails = useMailStore((state) => state.addEmails)
-  const queryClient = useQueryClient()
+  const [limit, setLimit] = React.useState(PAGE_SIZE)
+  const [fetching, setFetching] = React.useState(false)
 
-  // Server total for the mailbox, learned during revalidation. Used so the list
-  // can keep paginating even when the cache is only partially populated.
-  const serverTotalRef = React.useRef(0)
+  React.useEffect(() => setLimit(PAGE_SIZE), [mailboxId, userId])
 
-  const queryKey = ['emails', accountId, mailboxId] as const
-
-  const query = useInfiniteQuery<EmailsResponse>({
-    queryKey,
-    queryFn: async ({ pageParam }) => {
-      const position = (pageParam as number) ?? 0
-      if (!accountId || !mailboxId || !userId) return { emails: [], total: 0, position: 0 }
-
-      await syncManager.ensureUser(userId)
-
-      // Cache-first: serve this page straight from IndexedDB when we have it.
-      const cached = await syncManager.getCachedEmails(userId, mailboxId, position, PAGE_SIZE)
-      if (cached.length > 0) {
-        const cachedTotal = await syncManager.countCachedEmails(userId, mailboxId)
-        return {
-          emails: cached,
-          total: Math.max(cachedTotal, serverTotalRef.current),
-          position,
-        }
-      }
-
-      // Cache miss → fetch from the server and write it through to the cache.
-      const result = await syncManager.fetchAndCacheEmails(
-        accountId,
-        userId,
-        mailboxId,
-        position,
-        PAGE_SIZE
-      )
-      serverTotalRef.current = result.total
-      return result
-    },
-    getNextPageParam: (lastPage: EmailsResponse, allPages: EmailsResponse[]) => {
-      const loadedCount = allPages.reduce((sum, page) => sum + page.emails.length, 0)
-      if (loadedCount >= lastPage.total) return undefined
-      return loadedCount
-    },
-    initialPageParam: 0,
-    enabled: !!session && !!accountId && !!mailboxId && !!userId,
-    staleTime: 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    retry: 1,
-  })
-
-  // Background revalidation: pull the newest page from the server into the cache,
-  // then re-read the list from cache. Used on mailbox open, on a poll interval,
-  // and on push/manual-refresh signals. Kept out of the query itself so a
-  // refresh never blanks the already-rendered cached list.
-  const revalidate = React.useCallback(async () => {
-    if (!accountId || !mailboxId || !userId) return
-    try {
-      await syncManager.ensureUser(userId)
-      const result = await syncManager.fetchAndCacheEmails(
-        accountId,
-        userId,
-        mailboxId,
-        0,
-        PAGE_SIZE
-      )
-      serverTotalRef.current = result.total
-      // Re-read every loaded page from the now-fresh cache (no extra server hits).
-      queryClient.invalidateQueries({ queryKey })
-    } catch (error) {
-      if (import.meta.env.DEV) console.error('[useEmails] revalidate failed:', error)
-    }
-    // queryKey is derived from these deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, mailboxId, userId, queryClient])
-
-  // Revalidate when the mailbox opens and on a polling interval (the desktop
-  // build has no push, so polling is the refresh path there).
-  React.useEffect(() => {
-    if (!accountId || !mailboxId || !userId) return
-    revalidate()
-    const id = window.setInterval(revalidate, config.performance.refetchIntervalMs)
-    return () => window.clearInterval(id)
-  }, [accountId, mailboxId, userId, revalidate])
-
-  // Live refresh on change signals (web push, manual refresh broadcast).
-  React.useEffect(() => {
-    const onChange = () => revalidate()
-    window.addEventListener('jmap-changed', onChange)
-    window.addEventListener('mailbox-changed', onChange)
-    return () => {
-      window.removeEventListener('jmap-changed', onChange)
-      window.removeEventListener('mailbox-changed', onChange)
-    }
-  }, [revalidate])
-
-  // Update store when data changes
-  React.useEffect(() => {
-    if (query.data) {
-      const allEmails = query.data.pages.flatMap((page) => page.emails)
-      if (allEmails.length > 0) {
-        addEmails(allEmails)
-      }
-    }
-  }, [query.data, addEmails])
-
-  const emails = React.useMemo(
-    () => query.data?.pages.flatMap((page) => page.emails) ?? [],
-    [query.data]
+  const emails = useCacheQuery(
+    () =>
+      userId && mailboxId
+        ? db.messages
+            .where('_mbSort')
+            .between(...mailboxSortRange(userId, mailboxId))
+            .reverse()
+            .limit(limit)
+            .toArray()
+        : ([] as CachedEmail[]),
+    [userId, mailboxId, limit],
+    [] as CachedEmail[]
   )
 
-  const total = query.data?.pages[0]?.total ?? 0
-  const hasMore = query.hasNextPage ?? false
+  // Server-side total comes from the (synced) mailbox row.
+  const mailbox = useCacheQuery(
+    () => (userId && mailboxId ? db.folders.get([userId, mailboxId]) : undefined),
+    [userId, mailboxId],
+    undefined
+  )
+  // While the reconcile is downloading, it fills the cache itself (newest
+  // first) — don't race it with page fetches of the same emails.
+  const indexing = useSyncStatusStore((s) => s.indexing)
+  const loaded = emails?.length ?? 0
+  const total = Math.max(mailbox?.totalEmails ?? 0, loaded)
+
+  // Fill from the server when the cache is short of what the view wants.
+  // Last server page, shown only if the cache yields nothing (cache disabled
+  // after a storage fault) so the list still works without IndexedDB.
+  const [serverPage, setServerPage] = React.useState<{ key: string; emails: Email[] } | null>(null)
+  const viewKey = `${userId}|${mailboxId}`
+
+  const attempted = React.useRef(new Set<string>())
+  React.useEffect(() => {
+    if (!emails || !accountId || !userId || !mailboxId || fetching) return
+    // First page always (instant first paint); later pages wait for the reconcile.
+    if (indexing && loaded > 0) return
+    const want = Math.min(limit, mailbox?.totalEmails ?? limit)
+    if (loaded >= want) return
+    const key = `${userId}|${mailboxId}|${loaded}`
+    if (attempted.current.has(key)) return
+    attempted.current.add(key)
+    setFetching(true)
+    syncManager
+      .fetchAndCacheEmails(accountId, userId, mailboxId, loaded, limit - loaded)
+      .then((r) => {
+        if (loaded === 0) setServerPage({ key: `${userId}|${mailboxId}`, emails: r.emails })
+      })
+      .catch((e) => {
+        if (import.meta.env.DEV) console.error('[useEmails] fill failed:', e)
+      })
+      .finally(() => setFetching(false))
+  }, [emails, loaded, limit, mailbox?.totalEmails, accountId, userId, mailboxId, fetching, indexing])
+
+  const shown: Email[] | undefined =
+    emails && emails.length === 0 && serverPage?.key === viewKey ? serverPage.emails : emails
+
+  // Mirror into mailStore (the reader and composers look emails up there).
+  React.useEffect(() => {
+    if (shown && shown.length > 0) addEmails(shown)
+  }, [shown, addEmails])
+
+  const fetchNextPage = React.useCallback(() => setLimit((l) => l + PAGE_SIZE), [])
+  const refetch = React.useCallback(() => syncManager.syncNow(), [])
 
   return {
-    emails,
-    isLoading: query.isLoading,
-    isFetching: query.isFetching,
-    isFetchingNextPage: query.isFetchingNextPage,
-    hasMore,
+    emails: shown ?? [],
+    isLoading: emails === undefined || (loaded === 0 && fetching),
+    isFetching: fetching,
+    isFetchingNextPage: fetching && loaded > 0,
+    hasMore: loaded < total,
     total,
-    fetchNextPage: query.fetchNextPage,
-    // Refresh button → force a server revalidation (not just a cache re-read).
-    refetch: revalidate,
+    fetchNextPage,
+    // Refresh button → a delta sync with the server.
+    refetch,
   }
 }

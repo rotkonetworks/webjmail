@@ -1,7 +1,6 @@
 // src/hooks/useIndexedDB.ts
 import { useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { db } from '../db'
+import { useQuery } from '@tanstack/react-query'
 import { syncManager } from '../db/sync'
 import { useAuthStore } from '../stores/authStore'
 import { usePrimaryAccountId } from './usePrimaryAccountId'
@@ -29,45 +28,23 @@ export function useCurrentUserId(): string | null {
 }
 
 /**
- * Mount once in the authenticated shell. Initializes the offline sync manager
- * for the current user and kicks a one-time background pass that indexes every
- * email locally for offline full-text search. Works in the browser and the
- * desktop build alike (plain IndexedDB).
+ * Mount once in the authenticated shell. Runs the delta sync for the active
+ * account (initial reconcile, then changes on launch / push / poll) into the
+ * local IndexedDB mirror that every list reads live. Works in the browser and
+ * the desktop build alike; push is desktop-only.
  */
 export function useLocalIndex() {
   const accountId = usePrimaryAccountId()
-  const session = useAuthStore((state) => state.session)
   const userId = useCurrentUserId()
-  const queryClient = useQueryClient()
-
-  // Live refresh: when push reports a change (web), refetch the visible lists.
-  // (Tauri has no push and relies on polling.)
-  useEffect(() => {
-    const onChange = () => {
-      queryClient.invalidateQueries({ queryKey: ['emails'] })
-      queryClient.invalidateQueries({ queryKey: ['mailboxes'] })
-    }
-    window.addEventListener('jmap-changed', onChange)
-    window.addEventListener('mailbox-changed', onChange)
-    return () => {
-      window.removeEventListener('jmap-changed', onChange)
-      window.removeEventListener('mailbox-changed', onChange)
-    }
-  }, [queryClient])
 
   useEffect(() => {
-    if (!userId || !accountId || !session) return
-
+    if (!userId || !accountId) return
     let cancelled = false
     syncManager
       .initializeUser(userId)
       .then(() => {
         if (cancelled) return
-        syncManager.startPushSync(accountId)
-        // Fire-and-forget; no-ops if a full pass already ran recently.
-        syncManager.ensureFullIndex(accountId).catch((e) => {
-          if (import.meta.env.DEV) console.error('[LocalIndex] full index failed:', e)
-        })
+        syncManager.start(accountId, userId)
         // One-shot: report whether the server speaks JMAP Calendars (see console).
         void jmapClient.probeCalendars()
       })
@@ -75,81 +52,17 @@ export function useLocalIndex() {
         if (import.meta.env.DEV) console.error('[LocalIndex] init failed:', error)
       })
 
+    // Refresh signals from the UI (sidebar refresh, etc.) → delta sync.
+    const onChange = () => void syncManager.syncNow()
+    window.addEventListener('jmap-changed', onChange)
+    window.addEventListener('mailbox-changed', onChange)
     return () => {
       cancelled = true
+      window.removeEventListener('jmap-changed', onChange)
+      window.removeEventListener('mailbox-changed', onChange)
       syncManager.stop()
     }
-  }, [userId, accountId, session])
-}
-
-export function useOfflineEmails(mailboxId: string | null) {
-  const accountId = usePrimaryAccountId()
-  const session = useAuthStore((state) => state.session)
-  const userId = useCurrentUserId()
-
-  // Initialize sync manager with current user
-  useEffect(() => {
-    if (userId && accountId && session) {
-      syncManager
-        .initializeUser(userId)
-        .then(() => {
-          syncManager.startPushSync(accountId)
-        })
-        .catch((error) => {
-          if (import.meta.env.DEV) {
-            console.error('[IndexedDB] Failed to initialize user:', error)
-          }
-        })
-
-      return () => syncManager.stop()
-    }
-  }, [userId, accountId, session])
-
-  return useQuery({
-    queryKey: ['emails', 'offline', userId, mailboxId],
-    queryFn: async () => {
-      if (!mailboxId || !accountId || !userId) {
-        return { emails: [], total: 0, fromCache: false }
-      }
-
-      try {
-        // Ensure sync manager is initialized for this user
-        if (syncManager.getCurrentUserId() !== userId) {
-          await syncManager.initializeUser(userId)
-        }
-
-        // Always try to get cached emails first
-        const cachedEmails = await syncManager.getMailboxEmails(mailboxId, 0, 50)
-        const cachedTotal = await syncManager.countCachedEmails(userId, mailboxId)
-
-        // Return cached data immediately if available
-        if (cachedEmails.length > 0) {
-          // Trigger background sync to update cache
-          syncManager.syncMailbox(accountId, mailboxId).catch(console.error)
-          
-          return {
-            emails: cachedEmails,
-            total: cachedTotal,
-            fromCache: true,
-          }
-        }
-
-        // If no cache, sync from server
-        return syncManager.syncMailbox(accountId, mailboxId)
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error('[IndexedDB] Failed to fetch emails:', error)
-        }
-        return { emails: [], total: 0, fromCache: false }
-      }
-    },
-    enabled: !!session && !!accountId && !!mailboxId && !!userId,
-    staleTime: 60 * 1000, // Consider data fresh for 60s
-    refetchInterval: 60 * 1000, // Check every 60 seconds instead of 30
-    refetchIntervalInBackground: true,
-    refetchOnMount: false, // Don't refetch on mount if we have cache
-    refetchOnReconnect: true,
-  })
+  }, [userId, accountId])
 }
 
 export function useOfflineSearch(query: string, enabled: boolean) {
@@ -204,128 +117,5 @@ export function useOfflineSearch(query: string, enabled: boolean) {
     },
     enabled: enabled && query.length > 2 && !!userId,
     staleTime: 60 * 1000,
-  })
-}
-
-export function useOfflineEmailsInfinite(mailboxId: string | null) {
-  const accountId = usePrimaryAccountId()
-  const session = useAuthStore((state) => state.session)
-  const userId = useCurrentUserId()
-
-  // Initialize sync manager with current user
-  useEffect(() => {
-    if (userId && accountId && session) {
-      syncManager
-        .initializeUser(userId)
-        .then(() => {
-          syncManager.startPushSync(accountId)
-        })
-        .catch((error) => {
-          if (import.meta.env.DEV) {
-            console.error('[IndexedDB] Failed to initialize user:', error)
-          }
-        })
-
-      return () => syncManager.stop()
-    }
-  }, [userId, accountId, session])
-
-  return useQuery({
-    queryKey: ['emails', 'infinite', userId, mailboxId],
-    queryFn: async () => {
-      if (!mailboxId || !accountId || !userId) {
-        return { emails: [], hasMore: false, total: 0 }
-      }
-
-      try {
-        // Ensure sync manager is initialized for this user
-        if (syncManager.getCurrentUserId() !== userId) {
-          await syncManager.initializeUser(userId)
-        }
-
-        // Get first batch from cache
-        const emails = await syncManager.getMailboxEmails(mailboxId, 0, 50)
-        const total = await syncManager.countCachedEmails(userId, mailboxId)
-
-        return {
-          emails,
-          hasMore: emails.length < total,
-          total,
-        }
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.error('[IndexedDB] Failed to fetch infinite emails:', error)
-        }
-        return { emails: [], hasMore: false, total: 0 }
-      }
-    },
-    enabled: !!session && !!accountId && !!mailboxId && !!userId,
-    staleTime: 30 * 1000,
-  })
-}
-
-export function useLoadMoreEmails() {
-  const queryClient = useQueryClient()
-  const userId = useCurrentUserId()
-
-  return useMutation({
-    mutationFn: async ({ mailboxId, offset }: { mailboxId: string; offset: number }) => {
-      if (!userId) throw new Error('User not authenticated')
-
-      // Rate limiting check
-      const now = Date.now()
-      const lastLoad = (queryClient.getQueryData(['lastLoad', userId]) as number) || 0
-      if (now - lastLoad < 1000) {
-        // 1 second rate limit
-        throw new Error('Rate limit exceeded')
-      }
-      queryClient.setQueryData(['lastLoad', userId], now)
-
-      // Ensure sync manager is initialized for this user
-      if (syncManager.getCurrentUserId() !== userId) {
-        await syncManager.initializeUser(userId)
-      }
-
-      return syncManager.getMailboxEmails(mailboxId, offset, 50)
-    },
-    onSuccess: (newEmails, { mailboxId }) => {
-      // Update infinite query cache
-      queryClient.setQueryData(['emails', 'infinite', userId, mailboxId], (old: any) => {
-        if (!old) return { emails: newEmails, hasMore: newEmails.length === 50, total: 0 }
-
-        const allEmails = [...old.emails, ...newEmails]
-        return {
-          ...old,
-          emails: allEmails,
-          hasMore: newEmails.length === 50,
-        }
-      })
-    },
-  })
-}
-
-export function useClearOfflineData() {
-  const queryClient = useQueryClient()
-  const userId = useCurrentUserId()
-
-  return useMutation({
-    mutationFn: async () => {
-      if (!userId) throw new Error('User not authenticated')
-
-      // Double-check user identity
-      const currentUser = await db.getCurrentUser()
-      if (currentUser !== userId) {
-        throw new Error('User identity mismatch')
-      }
-
-      await db.clearUserData(userId)
-      syncManager.stop()
-    },
-    onSuccess: () => {
-      // Clear all queries for this user
-      queryClient.removeQueries({ queryKey: ['emails', 'offline', userId] })
-      queryClient.removeQueries({ queryKey: ['search', 'offline', userId] })
-      queryClient.removeQueries({ queryKey: ['emails', 'infinite', userId] })
-    },
   })
 }
